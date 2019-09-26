@@ -1,6 +1,7 @@
 import os
 import csv
 import torch.utils.data as data
+from torchvision.datasets import ImageFolder
 from PIL import Image
 
 def pil_loader(path):
@@ -10,9 +11,27 @@ def pil_loader(path):
         img = Image.open(f)
         return img.convert('RGB')
 
-class MiniImagenet(data.Dataset):
+class MyDataset(ImageFolder):
+    def __init__(self, root, **kwargs):
+        super(MyDataset, self).__init__(root, **kwargs)
+        self._fit_label_encoding()
 
-    base_folder = '/data/lisa/data/miniimagenet'
+    def _fit_label_encoding(self):
+        unique_labels = set(self.classes)
+        self._label_encoder = dict((label, idx) for (idx, label) in enumerate(unique_labels))
+
+class MiniImagenet(ImageFolder):
+    def __init__(self, root, **kwargs):
+        super(MiniImagenet, self).__init__(root, **kwargs)
+        self._fit_label_encoding()
+
+    def _fit_label_encoding(self):
+        unique_labels = set(self.classes)
+        self._label_encoder = dict((label, idx) for (idx, label) in enumerate(unique_labels))
+
+class OldMiniImagenet(data.Dataset):
+
+    base_folder = '~/dataset/miniimagenet'
     filename = 'miniimagenet.zip'
     splits = {
         'train': 'train.csv',
@@ -74,8 +93,7 @@ class MiniImagenet(data.Dataset):
     def _fit_label_encoding(self):
         _, labels = zip(*self._data)
         unique_labels = set(labels)
-        self._label_encoder = dict((label, idx)
-            for (idx, label) in enumerate(unique_labels))
+        self._label_encoder = dict((label, idx) for (idx, label) in enumerate(unique_labels))
 
     def _check_exists(self):
         return (os.path.exists(self.image_folder) 

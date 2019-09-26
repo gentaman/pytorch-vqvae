@@ -3,18 +3,21 @@ import torch
 import torch.nn.functional as F
 from torchvision import transforms, datasets
 from torchvision.utils import save_image, make_grid
+from tqdm import tqdm
 
 from modules import VectorQuantizedVAE, to_scalar
 from datasets import MiniImagenet
 
 from tensorboardX import SummaryWriter
 
-def train(data_loader, model, optimizer, args, writer):
-    for images, _ in data_loader:
+def train(data_loader, model, optimizer, args, writer=None):
+    for images, _ in tqdm(data_loader, total=len(data_loader)):
+        # print(images.shape)
         images = images.to(args.device)
 
         optimizer.zero_grad()
         x_tilde, z_e_x, z_q_x = model(images)
+        # print(x_tilde.shape)
 
         # Reconstruction loss
         loss_recons = F.mse_loss(x_tilde, images)
@@ -26,14 +29,15 @@ def train(data_loader, model, optimizer, args, writer):
         loss = loss_recons + loss_vq + args.beta * loss_commit
         loss.backward()
 
-        # Logs
-        writer.add_scalar('loss/train/reconstruction', loss_recons.item(), args.steps)
-        writer.add_scalar('loss/train/quantization', loss_vq.item(), args.steps)
+        if writer is not None:
+            # Logs
+            writer.add_scalar('loss/train/reconstruction', loss_recons.item(), args.steps)
+            writer.add_scalar('loss/train/quantization', loss_vq.item(), args.steps)
 
         optimizer.step()
         args.steps += 1
 
-def test(data_loader, model, args, writer):
+def test(data_loader, model, args, writer=None):
     with torch.no_grad():
         loss_recons, loss_vq = 0., 0.
         for images, _ in data_loader:
@@ -44,10 +48,11 @@ def test(data_loader, model, args, writer):
 
         loss_recons /= len(data_loader)
         loss_vq /= len(data_loader)
-
-    # Logs
-    writer.add_scalar('loss/test/reconstruction', loss_recons.item(), args.steps)
-    writer.add_scalar('loss/test/quantization', loss_vq.item(), args.steps)
+    
+    if writer is not None:
+        # Logs
+        writer.add_scalar('loss/test/reconstruction', loss_recons.item(), args.steps)
+        writer.add_scalar('loss/test/quantization', loss_vq.item(), args.steps)
 
     return loss_recons.item(), loss_vq.item()
 
@@ -68,6 +73,10 @@ def main(args):
         ])
         if args.dataset == 'mnist':
             # Define the train & test datasets
+            transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.5], std=[0.5])
+            ])
             train_dataset = datasets.MNIST(args.data_folder, train=True,
                 download=True, transform=transform)
             test_dataset = datasets.MNIST(args.data_folder, train=False,
@@ -75,6 +84,10 @@ def main(args):
             num_channels = 1
         elif args.dataset == 'fashion-mnist':
             # Define the train & test datasets
+            transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.5), (0.5))
+            ])
             train_dataset = datasets.FashionMNIST(args.data_folder,
                 train=True, download=True, transform=transform)
             test_dataset = datasets.FashionMNIST(args.data_folder,
@@ -90,17 +103,29 @@ def main(args):
         valid_dataset = test_dataset
     elif args.dataset == 'miniimagenet':
         transform = transforms.Compose([
-            transforms.RandomResizedCrop(128),
+            transforms.RandomResizedCrop(64),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
         # Define the train, valid & test datasets
-        train_dataset = MiniImagenet(args.data_folder, train=True,
-            download=True, transform=transform)
-        valid_dataset = MiniImagenet(args.data_folder, valid=True,
-            download=True, transform=transform)
-        test_dataset = MiniImagenet(args.data_folder, test=True,
-            download=True, transform=transform)
+        # train_dataset = MiniImagenet(args.data_folder, train=True,
+        #     download=False, transform=transform)
+        # valid_dataset = MiniImagenet(args.data_folder, valid=True,
+        #     download=False, transform=transform)
+        # test_dataset = MiniImagenet(args.data_folder, test=True,
+        #     download=False, transform=transform)
+        train_dataset = MiniImagenet(
+                                os.path.join(args.data_folder, 'train'),
+                                transform=transform
+                                )
+        valid_dataset = MiniImagenet(
+                                os.path.join(args.data_folder, 'val'),
+                                transform=transform
+                                )
+        test_dataset = MiniImagenet(
+                                os.path.join(args.data_folder, 'test'),
+                                transform=transform
+                                )
         num_channels = 3
 
     # Define the data loaders
@@ -127,9 +152,11 @@ def main(args):
     writer.add_image('reconstruction', grid, 0)
 
     best_loss = -1.
-    for epoch in range(args.num_epochs):
+    for epoch in tqdm(range(args.num_epochs), total=args.num_epochs):
         train(train_loader, model, optimizer, args, writer)
         loss, _ = test(valid_loader, model, args, writer)
+        train(train_loader, model, optimizer, args)
+        loss, _ = test(valid_loader, model, args)
 
         reconstruction = generate_samples(fixed_images, model, args)
         grid = make_grid(reconstruction.cpu(), nrow=8, range=(-1, 1), normalize=True)
@@ -164,7 +191,7 @@ if __name__ == '__main__':
     # Optimization
     parser.add_argument('--batch-size', type=int, default=128,
         help='batch size (default: 128)')
-    parser.add_argument('--num-epochs', type=int, default=100,
+    parser.add_argument('--num-epochs', type=int, default=10,
         help='number of epochs (default: 100)')
     parser.add_argument('--lr', type=float, default=2e-4,
         help='learning rate for Adam optimizer (default: 2e-4)')

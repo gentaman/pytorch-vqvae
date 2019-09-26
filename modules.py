@@ -111,24 +111,24 @@ class VectorQuantizedVAE(nn.Module):
     def __init__(self, input_dim, dim, K=512):
         super().__init__()
         self.encoder = nn.Sequential(
-            nn.Conv2d(input_dim, dim, 4, 2, 1),
+            nn.Conv2d(input_dim, dim, 7, 2, 3),
             nn.BatchNorm2d(dim),
             nn.ReLU(True),
-            nn.Conv2d(dim, dim, 4, 2, 1),
-            ResBlock(dim),
-            ResBlock(dim),
+            nn.Conv2d(dim, int(dim*2), 3, 1, 1),
+            ResBlock(int(dim*2)),
+            ResBlock(int(dim*2)),
         )
 
-        self.codebook = VQEmbedding(K, dim)
+        self.codebook = VQEmbedding(K, int(dim*2))
 
         self.decoder = nn.Sequential(
-            ResBlock(dim),
-            ResBlock(dim),
+            ResBlock(int(dim*2)),
+            ResBlock(int(dim*2)),
             nn.ReLU(True),
-            nn.ConvTranspose2d(dim, dim, 4, 2, 1),
+            nn.ConvTranspose2d(int(dim*2), dim, 3, 1, 1),
             nn.BatchNorm2d(dim),
             nn.ReLU(True),
-            nn.ConvTranspose2d(dim, input_dim, 4, 2, 1),
+            nn.ConvTranspose2d(dim, input_dim, 7, 2, 3),
             nn.Tanh()
         )
 

@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import json
 from torchvision import transforms
 from torchvision.utils import save_image, make_grid
+from tqdm import tqdm
 
 from modules import VectorQuantizedVAE, GatedPixelCNN
 from datasets import MiniImagenet
@@ -86,17 +87,29 @@ def main(args):
         valid_dataset = test_dataset
     elif args.dataset == 'miniimagenet':
         transform = transforms.Compose([
-            transforms.RandomResizedCrop(128),
+            transforms.RandomResizedCrop(64),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
         # Define the train, valid & test datasets
-        train_dataset = MiniImagenet(args.data_folder, train=True,
-            download=True, transform=transform)
-        valid_dataset = MiniImagenet(args.data_folder, valid=True,
-            download=True, transform=transform)
-        test_dataset = MiniImagenet(args.data_folder, test=True,
-            download=True, transform=transform)
+        # train_dataset = MiniImagenet(args.data_folder, train=True,
+        #     download=True, transform=transform)
+        # valid_dataset = MiniImagenet(args.data_folder, valid=True,
+        #     download=True, transform=transform)
+        # test_dataset = MiniImagenet(args.data_folder, test=True,
+        #     download=True, transform=transform)
+        train_dataset = MiniImagenet(
+                                os.path.join(args.data_folder, 'train'),
+                                transform=transform
+                                )
+        valid_dataset = MiniImagenet(
+                                os.path.join(args.data_folder, 'val'),
+                                transform=transform
+                                )
+        test_dataset = MiniImagenet(
+                                os.path.join(args.data_folder, 'test'),
+                                transform=transform
+                                )
         num_channels = 3
 
     # Define the data loaders
@@ -129,7 +142,7 @@ def main(args):
     optimizer = torch.optim.Adam(prior.parameters(), lr=args.lr)
 
     best_loss = -1.
-    for epoch in range(args.num_epochs):
+    for epoch in tqdm(range(args.num_epochs), total=args.num_epochs):
         train(train_loader, model, prior, optimizer, args, writer)
         # The validation loss is not properly computed since
         # the classes in the train and valid splits of Mini-Imagenet
