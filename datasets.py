@@ -1,6 +1,7 @@
 import os
 import csv
 import torch.utils.data as data
+from torchvision import transforms, datasets
 from torchvision.datasets import ImageFolder
 from PIL import Image
 
@@ -10,6 +11,100 @@ def pil_loader(path):
     with open(path, 'rb') as f:
         img = Image.open(f)
         return img.convert('RGB')
+
+
+def get_dataset(dataset, data_folder):
+    if dataset in ['mnist', 'fashion-mnist', 'cifar10']:
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
+        if dataset == 'mnist':
+            # Define the train & test datasets
+            transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.5], std=[0.5])
+            ])
+            train_dataset = datasets.MNIST(data_folder, train=True,
+                download=True, transform=transform)
+            test_dataset = datasets.MNIST(data_folder, train=False,
+                transform=transform)
+            num_channels = 1
+        elif dataset == 'fashion-mnist':
+            # Define the train & test datasets
+            transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.5), (0.5))
+            ])
+            train_dataset = datasets.FashionMNIST(data_folder,
+                train=True, download=True, transform=transform)
+            test_dataset = datasets.FashionMNIST(data_folder,
+                train=False, transform=transform)
+            num_channels = 1
+        elif dataset == 'cifar10':
+            # Define the train & test datasets
+            train_dataset = datasets.CIFAR10(data_folder,
+                train=True, download=True, transform=transform)
+            test_dataset = datasets.CIFAR10(data_folder,
+                train=False, transform=transform)
+            num_channels = 3
+        valid_dataset = test_dataset
+    elif dataset == 'miniimagenet':
+        transform = transforms.Compose([
+            transforms.RandomResizedCrop(64),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
+        # Define the train, valid & test datasets
+        train_dataset = MiniImagenet(
+                                os.path.join(data_folder, 'train'),
+                                transform=transform
+                                )
+        valid_dataset = MiniImagenet(
+                                os.path.join(data_folder, 'val'),
+                                transform=transform
+                                )
+        test_dataset = MiniImagenet(
+                                os.path.join(data_folder, 'test'),
+                                transform=transform
+                                )
+        num_channels = 3
+    elif dataset == 'kylberg':
+        kylberg_mean = (0.49794143, 0.49794143, 0.49794143)
+        kylberg_std = (0.15645953, 0.15645953, 0.15645953)
+        transform = transforms.Compose([
+            transforms.Resize(128),
+            transforms.RandomCrop(64),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomVerticalFlip(),
+            transforms.RandomRotation(degrees=30),
+            transforms.ToTensor(),
+            transforms.Normalize(kylberg_mean, kylberg_std)
+        ])
+        train_dataset = MyDataset(
+                                os.path.join(data_folder, 'train'),
+                                transform=transform
+        )
+        transform = transforms.Compose([
+            transforms.Resize(128),
+            transforms.CenterCrop(64),
+            transforms.ToTensor(),
+            transforms.Normalize(kylberg_mean, kylberg_std)
+        ])
+        test_dataset = MyDataset(
+                                os.path.join(data_folder, 'test'),
+                                transform=transform
+        )
+        valid_dataset = test_dataset
+        num_channels = 3
+    result_dict = {
+        'train': train_dataset,
+        'test': test_dataset,
+        'valid': valid_dataset,
+        'num_channels': num_channels
+    }
+
+    return result_dict
 
 class MyDataset(ImageFolder):
     def __init__(self, root, **kwargs):
