@@ -6,7 +6,7 @@ from torchvision.utils import save_image, make_grid
 from tqdm import tqdm
 
 from modules import VectorQuantizedVAE, to_scalar
-from datasets import MiniImagenet, get_dataset
+from datasets.datasets import MiniImagenet, get_dataset
 
 from tensorboardX import SummaryWriter
 
@@ -65,70 +65,8 @@ def generate_samples(images, model, args):
 def main(args):
     writer = SummaryWriter('./logs/{0}'.format(args.output_folder))
     save_filename = './models/{0}'.format(args.output_folder)
-
-    # if args.dataset in ['mnist', 'fashion-mnist', 'cifar10']:
-    #     transform = transforms.Compose([
-    #         transforms.ToTensor(),
-    #         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    #     ])
-    #     if args.dataset == 'mnist':
-    #         # Define the train & test datasets
-    #         transform = transforms.Compose([
-    #             transforms.ToTensor(),
-    #             transforms.Normalize(mean=[0.5], std=[0.5])
-    #         ])
-    #         train_dataset = datasets.MNIST(args.data_folder, train=True,
-    #             download=True, transform=transform)
-    #         test_dataset = datasets.MNIST(args.data_folder, train=False,
-    #             transform=transform)
-    #         num_channels = 1
-    #     elif args.dataset == 'fashion-mnist':
-    #         # Define the train & test datasets
-    #         transform = transforms.Compose([
-    #             transforms.ToTensor(),
-    #             transforms.Normalize((0.5), (0.5))
-    #         ])
-    #         train_dataset = datasets.FashionMNIST(args.data_folder,
-    #             train=True, download=True, transform=transform)
-    #         test_dataset = datasets.FashionMNIST(args.data_folder,
-    #             train=False, transform=transform)
-    #         num_channels = 1
-    #     elif args.dataset == 'cifar10':
-    #         # Define the train & test datasets
-    #         train_dataset = datasets.CIFAR10(args.data_folder,
-    #             train=True, download=True, transform=transform)
-    #         test_dataset = datasets.CIFAR10(args.data_folder,
-    #             train=False, transform=transform)
-    #         num_channels = 3
-    #     valid_dataset = test_dataset
-    # elif args.dataset == 'miniimagenet':
-    #     transform = transforms.Compose([
-    #         transforms.RandomResizedCrop(64),
-    #         transforms.ToTensor(),
-    #         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    #     ])
-    #     # Define the train, valid & test datasets
-    #     # train_dataset = MiniImagenet(args.data_folder, train=True,
-    #     #     download=False, transform=transform)
-    #     # valid_dataset = MiniImagenet(args.data_folder, valid=True,
-    #     #     download=False, transform=transform)
-    #     # test_dataset = MiniImagenet(args.data_folder, test=True,
-    #     #     download=False, transform=transform)
-    #     train_dataset = MiniImagenet(
-    #                             os.path.join(args.data_folder, 'train'),
-    #                             transform=transform
-    #                             )
-    #     valid_dataset = MiniImagenet(
-    #                             os.path.join(args.data_folder, 'val'),
-    #                             transform=transform
-    #                             )
-    #     test_dataset = MiniImagenet(
-    #                             os.path.join(args.data_folder, 'test'),
-    #                             transform=transform
-    #                             )
-    #     num_channels = 3
-
-    result = get_dataset(args.dataset, args.data_folder)
+    
+    result = get_dataset(args.dataset, args.data_folder, image_size=args.image_size)
 
     train_dataset = result['train']
     test_dataset = result['test']
@@ -188,6 +126,9 @@ if __name__ == '__main__':
         help='name of the data folder')
     parser.add_argument('--dataset', type=str,
         help='name of the dataset (mnist, fashion-mnist, cifar10, miniimagenet)')
+    parser.add_argument('--image-size', type=int, default=128,
+        help='size of the input image (default: 128)')
+
 
     # Latent space
     parser.add_argument('--hidden-size', type=int, default=256,
@@ -198,7 +139,7 @@ if __name__ == '__main__':
     # Optimization
     parser.add_argument('--batch-size', type=int, default=128,
         help='batch size (default: 128)')
-    parser.add_argument('--num-epochs', type=int, default=10,
+    parser.add_argument('--num-epochs', type=int, default=100,
         help='number of epochs (default: 100)')
     parser.add_argument('--lr', type=float, default=2e-4,
         help='learning rate for Adam optimizer (default: 2e-4)')
