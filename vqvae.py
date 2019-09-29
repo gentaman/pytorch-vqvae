@@ -63,8 +63,10 @@ def generate_samples(images, model, args):
     return x_tilde
 
 def main(args):
-    writer = SummaryWriter('./logs/{0}'.format(args.output_folder))
-    save_filename = './models/{0}'.format(args.output_folder)
+    root = args.root
+    path = os.path.join(root, 'logs', args.output_folder)
+    writer = SummaryWriter(path)
+    save_filename = os.path.join(root, 'models', args.output_folder)
     
     result = get_dataset(args.dataset, args.data_folder, image_size=args.image_size)
 
@@ -118,6 +120,7 @@ if __name__ == '__main__':
     import argparse
     import os
     import multiprocessing as mp
+    import sys
 
     parser = argparse.ArgumentParser(description='VQ-VAE')
 
@@ -147,6 +150,8 @@ if __name__ == '__main__':
         help='contribution of commitment loss, between 0.1 and 2.0 (default: 1.0)')
 
     # Miscellaneous
+    parser.add_argument('--root', type=str, default='.',
+        help='name of the root of the output folder (default: .)')
     parser.add_argument('--output-folder', type=str, default='vqvae',
         help='name of the output folder (default: vqvae)')
     parser.add_argument('--num-workers', type=int, default=mp.cpu_count() - 1,
@@ -157,18 +162,28 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Create logs and models folder if they don't exist
-    if not os.path.exists('./logs'):
-        os.makedirs('./logs')
-    if not os.path.exists('./models'):
-        os.makedirs('./models')
+    root = args.root
+    log_path = os.path.join(root, 'logs')
+    if not os.path.exists(log_path):
+        os.makedirs(log_path)
+    models_path = os.path.join(root, 'models')
+    if not os.path.exists(models_path):
+        os.makedirs(models_path)
+    path = os.path.join(root, 'configs', args.output_folder)
+    if not os.path.exists(path):
+        os.makedirs(path)
+    with open(os.path.join(path, 'config'), 'w') as f:
+        f.write('\n'.join(sys.argv))
+    
     # Device
     args.device = torch.device(args.device
         if torch.cuda.is_available() else 'cpu')
     # Slurm
     if 'SLURM_JOB_ID' in os.environ:
         args.output_folder += '-{0}'.format(os.environ['SLURM_JOB_ID'])
-    if not os.path.exists('./models/{0}'.format(args.output_folder)):
-        os.makedirs('./models/{0}'.format(args.output_folder))
+    path = os.path.join(models_path, args.output_folder)
+    if not os.path.exists(path):
+        os.makedirs(path)
     args.steps = 0
 
     main(args)
