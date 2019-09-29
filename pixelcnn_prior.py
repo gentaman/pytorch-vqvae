@@ -6,8 +6,8 @@ from torchvision import transforms
 from torchvision.utils import save_image, make_grid
 from tqdm import tqdm
 
-from modules import VectorQuantizedVAE, GatedPixelCNN
-from datasets import MiniImagenet
+from modules.modules import VectorQuantizedVAE, GatedPixelCNN
+from datasets.datasets import get_dataset
 
 from tensorboardX import SummaryWriter
 
@@ -55,62 +55,17 @@ def test(data_loader, model, prior, args, writer):
     return loss.item()
 
 def main(args):
-    writer = SummaryWriter('./logs/{0}'.format(args.output_folder))
-    save_filename = './models/{0}/prior.pt'.format(args.output_folder)
+    root = args.root
+    path = os.path.join(root, 'logs', args.output_folder)
+    writer = SummaryWriter(path)
+    save_path = os.path.join(root, 'models', args.output_folder)
 
-    if args.dataset in ['mnist', 'fashion-mnist', 'cifar10']:
-        transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-        ])
-        if args.dataset == 'mnist':
-            # Define the train & test datasets
-            train_dataset = datasets.MNIST(args.data_folder, train=True,
-                download=True, transform=transform)
-            test_dataset = datasets.MNIST(args.data_folder, train=False,
-                transform=transform)
-            num_channels = 1
-        elif args.dataset == 'fashion-mnist':
-            # Define the train & test datasets
-            train_dataset = datasets.FashionMNIST(args.data_folder,
-                train=True, download=True, transform=transform)
-            test_dataset = datasets.FashionMNIST(args.data_folder,
-                train=False, transform=transform)
-            num_channels = 1
-        elif args.dataset == 'cifar10':
-            # Define the train & test datasets
-            train_dataset = datasets.CIFAR10(args.data_folder,
-                train=True, download=True, transform=transform)
-            test_dataset = datasets.CIFAR10(args.data_folder,
-                train=False, transform=transform)
-            num_channels = 3
-        valid_dataset = test_dataset
-    elif args.dataset == 'miniimagenet':
-        transform = transforms.Compose([
-            transforms.RandomResizedCrop(64),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-        ])
-        # Define the train, valid & test datasets
-        # train_dataset = MiniImagenet(args.data_folder, train=True,
-        #     download=True, transform=transform)
-        # valid_dataset = MiniImagenet(args.data_folder, valid=True,
-        #     download=True, transform=transform)
-        # test_dataset = MiniImagenet(args.data_folder, test=True,
-        #     download=True, transform=transform)
-        train_dataset = MiniImagenet(
-                                os.path.join(args.data_folder, 'train'),
-                                transform=transform
-                                )
-        valid_dataset = MiniImagenet(
-                                os.path.join(args.data_folder, 'val'),
-                                transform=transform
-                                )
-        test_dataset = MiniImagenet(
-                                os.path.join(args.data_folder, 'test'),
-                                transform=transform
-                                )
-        num_channels = 3
+    result = get_dataset(args.dataset, args.data_folder, image_size=args.image_size)
+
+    train_dataset = result['train']
+    test_dataset = result['test']
+    valid_dataset = result['valid']
+    num_channels = result['num_channels']
 
     # Define the data loaders
     train_loader = torch.utils.data.DataLoader(train_dataset,
@@ -123,7 +78,7 @@ def main(args):
         batch_size=16, shuffle=True)
 
     # Save the label encoder
-    with open('./models/{0}/labels.json'.format(args.output_folder), 'w') as f:
+    with open('{0}/labels.json'.format(save_path), 'w') as f:
         json.dump(train_dataset._label_encoder, f)
 
     # Fixed images for Tensorboard
@@ -132,7 +87,9 @@ def main(args):
     writer.add_image('original', fixed_grid, 0)
 
     model = VectorQuantizedVAE(num_channels, args.hidden_size_vae, args.k).to(args.device)
-    with open(args.model, 'rb') as f:
+    
+    model_path = os.path.join(root, 'models', args.model)
+    with open(model_path, 'rb') as f:
         state_dict = torch.load(f)
         model.load_state_dict(state_dict)
     model.eval()
@@ -151,12 +108,13 @@ def main(args):
 
         if (epoch == 0) or (loss < best_loss):
             best_loss = loss
-            with open(save_filename, 'wb') as f:
+            with open(os.path.join(save_path, 'best.pixelcnn.model'), 'wb') as f:
                 torch.save(prior.state_dict(), f)
 
 if __name__ == '__main__':
     import argparse
     import os
+    import sys
     import multiprocessing as mp
 
     parser = argparse.ArgumentParser(description='PixelCNN Prior for VQ-VAE')
@@ -166,6 +124,8 @@ if __name__ == '__main__':
         help='name of the data folder')
     parser.add_argument('--dataset', type=str,
         help='name of the dataset (mnist, fashion-mnist, cifar10, miniimagenet)')
+    parser.add_argument('--image-size', type=int, default=128,
+        help='size of the input image (default: 128)')
     parser.add_argument('--model', type=str,
         help='filename containing the model')
 
@@ -188,6 +148,8 @@ if __name__ == '__main__':
         help='learning rate for Adam optimizer (default: 3e-4)')
 
     # Miscellaneous
+    parser.add_argument('--root', type=str, default='.',
+        help='name of the root of the output folder (default: .)')
     parser.add_argument('--output-folder', type=str, default='prior',
         help='name of the output folder (default: prior)')
     parser.add_argument('--num-workers', type=int, default=mp.cpu_count() - 1,
@@ -198,18 +160,28 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Create logs and models folder if they don't exist
-    if not os.path.exists('./logs'):
-        os.makedirs('./logs')
-    if not os.path.exists('./models'):
-        os.makedirs('./models')
+    root = args.root
+    log_path = os.path.join(root, 'logs')
+    if not os.path.exists(log_path):
+        os.makedirs(log_path)
+    models_path = os.path.join(root, 'models')
+    if not os.path.exists(models_path):
+        os.makedirs(models_path)
+    path = os.path.join(root, 'configs', args.output_folder)
+    if not os.path.exists(path):
+        os.makedirs(path)
+    with open(os.path.join(path, 'config'), 'w') as f:
+        f.write('\n'.join(sys.argv))
+    
     # Device
     args.device = torch.device(args.device
         if torch.cuda.is_available() else 'cpu')
     # Slurm
     if 'SLURM_JOB_ID' in os.environ:
         args.output_folder += '-{0}'.format(os.environ['SLURM_JOB_ID'])
-    if not os.path.exists('./models/{0}'.format(args.output_folder)):
-        os.makedirs('./models/{0}'.format(args.output_folder))
+    path = os.path.join(models_path, args.output_folder)
+    if not os.path.exists(path):
+        os.makedirs(path)
     args.steps = 0
 
     main(args)
