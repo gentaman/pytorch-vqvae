@@ -91,6 +91,12 @@ def main(args):
     writer.add_image('original', fixed_grid, 0)
 
     model = VectorQuantizedVAE(num_channels, args.hidden_size, args.k).to(args.device)
+
+    if args.model:
+        print("load model ==> {}".format(args.model))
+        with open(args.model, 'rb') as f:
+            state_dict = torch.load(f)
+            model.load_state_dict(state_dict)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     # Generate the samples first once
@@ -131,6 +137,8 @@ if __name__ == '__main__':
         help='name of the dataset (mnist, fashion-mnist, cifar10, miniimagenet)')
     parser.add_argument('--image-size', type=int, default=128,
         help='size of the input image (default: 128)')
+    parser.add_argument('--model', type=str, default='',
+        help='filename containing the model')
 
 
     # Latent space
