@@ -109,11 +109,14 @@ def get_dataset(dataset, data_folder, image_size=None):
         num_channels = 3
     
     elif dataset == 'kylberg':
+        if image_size is None:
+            image_size = 64
+
         kylberg_mean = (0.49794143, 0.49794143, 0.49794143)
         kylberg_std = (0.15645953, 0.15645953, 0.15645953)
         transform = transforms.Compose([
-            transforms.Resize(128),
-            transforms.RandomCrop(64),
+            transforms.Resize(image_size+32),
+            transforms.RandomCrop(image_size),
             transforms.RandomHorizontalFlip(),
             transforms.RandomVerticalFlip(),
             transforms.RandomRotation(degrees=30),
@@ -125,8 +128,8 @@ def get_dataset(dataset, data_folder, image_size=None):
                                 transform=transform
         )
         transform = transforms.Compose([
-            transforms.Resize(128),
-            transforms.CenterCrop(64),
+            transforms.Resize(image_size+32),
+            transforms.RandomCrop(image_size),
             transforms.ToTensor(),
             transforms.Normalize(kylberg_mean, kylberg_std)
         ])
