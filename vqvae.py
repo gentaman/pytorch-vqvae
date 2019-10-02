@@ -5,7 +5,7 @@ from torchvision import transforms, datasets
 from torchvision.utils import save_image, make_grid
 from tqdm import tqdm
 
-from modules import VectorQuantizedVAE, to_scalar
+from modules.modules import VectorQuantizedVAE, to_scalar
 from datasets.datasets import MiniImagenet, get_dataset
 
 from tensorboardX import SummaryWriter
