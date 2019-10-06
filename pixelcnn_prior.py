@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
+from torch import nn
+from torch.backends import cudnn
 import json
 from torchvision import transforms
 from torchvision.utils import save_image, make_grid
@@ -12,10 +14,13 @@ from datasets.datasets import get_dataset
 from tensorboardX import SummaryWriter
 
 def train(data_loader, model, prior, optimizer, args, writer):
-    for images, labels in data_loader:
+    for images, labels in tqdm(data_loader, total=len(data_loader)):
         with torch.no_grad():
             images = images.to(args.device)
-            latents = model.encode(images)
+            if args.multi_gpu:
+                latents = model.module.encode(images)
+            else:
+                latents = model.encode(images)
             latents = latents.detach()
 
         labels = labels.to(args.device)
@@ -36,11 +41,14 @@ def train(data_loader, model, prior, optimizer, args, writer):
 def test(data_loader, model, prior, args, writer):
     with torch.no_grad():
         loss = 0.
-        for images, labels in data_loader:
+        for images, labels in tqdm(data_loader, total=len(data_loader)):
             images = images.to(args.device)
             labels = labels.to(args.device)
 
-            latents = model.encode(images)
+            if args.multi_gpu:
+                latents = model.module.encode(images)
+            else:
+                latents = model.encode(images)
             latents = latents.detach()
             logits = prior(latents, labels)
             logits = logits.permute(0, 2, 3, 1).contiguous()
@@ -69,7 +77,7 @@ def main(args):
 
     # Define the data loaders
     train_loader = torch.utils.data.DataLoader(train_dataset,
-        batch_size=args.batch_size, shuffle=False,
+        batch_size=args.batch_size, shuffle=True,
         num_workers=args.num_workers, pin_memory=True)
     valid_loader = torch.utils.data.DataLoader(valid_dataset,
         batch_size=args.batch_size, shuffle=False, drop_last=True,
@@ -86,16 +94,24 @@ def main(args):
     fixed_grid = make_grid(fixed_images, nrow=8, range=(-1, 1), normalize=True)
     writer.add_image('original', fixed_grid, 0)
 
-    model = VectorQuantizedVAE(num_channels, args.hidden_size_vae, args.k).to(args.device)
-    
+    model = VectorQuantizedVAE(num_channels, args.hidden_size_vae, args.k).to(args.device)    
     model_path = os.path.join(root, 'models', args.model)
     with open(model_path, 'rb') as f:
         state_dict = torch.load(f)
         model.load_state_dict(state_dict)
+    if args.multi_gpu:
+        print('using multi-gpu')
+        model = nn.DataParallel(model)
+        cudnn.benchmark = True
     model.eval()
 
     prior = GatedPixelCNN(args.k, args.hidden_size_prior,
         args.num_layers, n_classes=len(train_dataset._label_encoder)).to(args.device)
+    if args.multi_gpu:
+        print('using multi-gpu')
+        prior = nn.DataParallel(prior)
+        cudnn.benchmark = True
+        
     optimizer = torch.optim.Adam(prior.parameters(), lr=args.lr)
 
     best_loss = -1.
@@ -126,7 +142,7 @@ if __name__ == '__main__':
         help='name of the dataset (mnist, fashion-mnist, cifar10, miniimagenet)')
     parser.add_argument('--image-size', type=int, default=128,
         help='size of the input image (default: 128)')
-    parser.add_argument('--model', type=str,
+    parser.add_argument('--model', type=str, required=True,
         help='filename containing the model')
 
     # Latent space
@@ -156,6 +172,8 @@ if __name__ == '__main__':
         help='number of workers for trajectories sampling (default: {0})'.format(mp.cpu_count() - 1))
     parser.add_argument('--device', type=str, default='cpu',
         help='set the device (cpu or cuda, default: cpu)')
+    parser.add_argument('--multi-gpu', action='store_true',
+                        help='enable mutli-gpu.')
 
     args = parser.parse_args()
 
