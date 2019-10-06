@@ -1,5 +1,6 @@
 import os
 import csv
+from glob import glob
 import torch.utils.data as data
 from torchvision import transforms, datasets
 from torchvision.datasets import ImageFolder
@@ -88,10 +89,14 @@ def get_dataset(dataset, data_folder, image_size=None):
             normalize
         ])
         # Define the train, valid & test datasets
-        
         data_path = os.path.join(data_folder, 'ilsvrc2012')
+        if not os.path.exists(data_path):
+            data_path = os.path.join(data_folder, 'ILSVRC2012')
+
         traindir = os.path.join(data_path, 'train')
         train_dataset = datasets.ImageFolder(traindir, transform)
+        unique_labels = set(train_dataset.classes)
+        train_dataset._label_encoder = dict((label, idx) for (idx, label) in enumerate(unique_labels))
 
         transform = transforms.Compose([
             transforms.Resize((image_size, image_size)),
@@ -99,10 +104,15 @@ def get_dataset(dataset, data_folder, image_size=None):
             transforms.ToTensor(),
             normalize])
         
-        data_path = os.path.join(data_folder, 'ilsvrc2012')
+        valdir = os.path.join(data_path, 'val')
         txt_path = os.path.join(data_folder, 'ilsvrc2012/val.txt')
-        
-        valid_dataset = MyImageFolder(data_path, txt_path, transform)
+        dirs = glob(os.path.join(valdir, '**')+'/')
+        if len(dirs) > 0:
+            valid_dataset = datasets.ImageFolder(valdir, transform)
+        else:
+            valid_dataset = MyImageFolder(data_path, txt_path, transform)
+        unique_labels = set(valid_dataset.classes)
+        valid_dataset._label_encoder = dict((label, idx) for (idx, label) in enumerate(unique_labels))
 
         test_dataset = valid_dataset
 

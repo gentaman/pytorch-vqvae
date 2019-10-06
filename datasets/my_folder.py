@@ -1,4 +1,11 @@
-from torchvision.datasets import VisionDataset
+import torchvision
+version = torchvision.__version__
+c1, c2, c3 =  version.split('.')
+if int(c1) == 0:
+    if int(c2) > 2:
+        from torchvision.datasets import VisionDataset as SupDataset
+    else:
+        from torch.utils.data import Dataset as SupDataset
 
 from PIL import Image
 
@@ -60,7 +67,7 @@ def make_dataset(root, path, extensions=None, is_valid_file=None):
     return images
 
 
-class MyDatasetFolder(VisionDataset):
+class MyDatasetFolder(SupDataset):
     """A generic data loader where the samples are arranged in this way: ::
 
         root/xxx.ext 0
