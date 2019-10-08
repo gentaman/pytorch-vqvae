@@ -92,6 +92,8 @@ def get_dataset(dataset, data_folder, image_size=None):
         data_path = os.path.join(data_folder, 'ilsvrc2012')
         if not os.path.exists(data_path):
             data_path = os.path.join(data_folder, 'ILSVRC2012')
+        if not os.path.exists(data_path):
+            data_path = data_folder
 
         traindir = os.path.join(data_path, 'train')
         train_dataset = datasets.ImageFolder(traindir, transform)
@@ -105,7 +107,7 @@ def get_dataset(dataset, data_folder, image_size=None):
             normalize])
         
         valdir = os.path.join(data_path, 'val')
-        txt_path = os.path.join(data_folder, 'ilsvrc2012/val.txt')
+        txt_path = os.path.join(data_folder, 'val.txt')
         dirs = glob(os.path.join(valdir, '**')+'/')
         if len(dirs) > 0:
             valid_dataset = datasets.ImageFolder(valdir, transform)
