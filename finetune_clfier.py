@@ -34,20 +34,29 @@ def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None):
 
         optimizer.zero_grad()
         with torch.no_grad():
-            latents = model.encode(images)
-            latents = model.codebook.embedding(latents).permute(0, 3, 1, 2)
+            if args.multi_gpu:
+                latents = model.module.encode(images)
+                latents = model.module.codebook.embedding(latents).permute(0, 3, 1, 2)
+            else:
+                latents = model.encode(images)
+                latents = model.codebook.embedding(latents).permute(0, 3, 1, 2)
+            
         out = clfy(latents)
         loss = loss_fn(out, labels)
         loss.backward()
+        acc, = accuracy(out, labels)
 
         if writer is not None:
             # Logs
             writer.add_scalar('loss/train', loss.item(), args.steps)
+            writer.add_scalar('accuracy/train', acc, args.steps)
 
         optimizer.step()
         args.steps += 1
     
-def test(data_loader, model, clfy, args, writer=None):
+def test(data_loader, model, clfy, args, writer=None, loss_fn=None):
+    if loss_fn is None:
+        loss_fn = nn.CrossEntropyLoss()
     with torch.no_grad():
         loss_total = 0.
         acc_total = 0.
@@ -56,8 +65,12 @@ def test(data_loader, model, clfy, args, writer=None):
             images = images.to('cuda')
             labels = labels.to('cuda')
 
-            latents = model.encode(images)
-            latents = model.codebook.embedding(latents).permute(0, 3, 1, 2)
+            if args.multi_gpu:
+                latents = model.module.encode(images)
+                latents = model.module.codebook.embedding(latents).permute(0, 3, 1, 2)
+            else:
+                latents = model.encode(images)
+                latents = model.codebook.embedding(latents).permute(0, 3, 1, 2)
             out = clfy(latents)
             loss_total += loss_fn(out, labels)
             acc, = accuracy(out, labels)
@@ -65,6 +78,7 @@ def test(data_loader, model, clfy, args, writer=None):
             if writer is not None:
                 # Logs
                 writer.add_scalar('loss/test', loss.item(), args.steps)
+                writer.add_scalar('accuracy/test', acc, args.steps)
 
         loss_total /= len(data_loader)
         acc_total /= len(data_loader)
@@ -99,11 +113,6 @@ def main(args):
     with open('{0}/labels.json'.format(save_path), 'w') as f:
         json.dump(train_dataset._label_encoder, f)
 
-    # Fixed images for Tensorboard
-    fixed_images, _ = next(iter(test_loader))
-    fixed_grid = make_grid(fixed_images, nrow=8, range=(-1, 1), normalize=True)
-    writer.add_image('original', fixed_grid, 0)
-
     model = VectorQuantizedVAE(num_channels, args.hidden_size_vae, args.k).to(args.device)    
     model_path = os.path.join(root, 'models', args.model)
     with open(model_path, 'rb') as f:
@@ -136,12 +145,12 @@ def main(args):
         # The validation loss is not properly computed since
         # the classes in the train and valid splits of Mini-Imagenet
         # do not overlap.
-        # loss = test(valid_loader, model, prior, args, writer)
+        loss, _ = test(valid_loader, model, prior, args, writer, loss_fn=loss_fn)
         
-        # if (epoch == 0) or (loss < best_loss):
-        #     best_loss = loss
-        #     with open(os.path.join(save_path, 'best.pixelcnn.model'), 'wb') as f:
-        #         torch.save(prior.state_dict(), f)
+        if (epoch == 0) or (loss < best_loss):
+            best_loss = loss
+            with open(os.path.join(save_path, 'best.predict.model'), 'wb') as f:
+                torch.save(prior.state_dict(), f)
     with open(os.path.join(save_path, 'final.model'), 'wb') as f:
         torch.save(predictor.state_dict, f)
 
@@ -166,6 +175,8 @@ if __name__ == '__main__':
     # Latent space
     parser.add_argument('--hidden-size', type=int, default=None,
         help='size of the latent vecotor (default: None)')
+    parser.add_argument('--hidden-size-vae', type=int, default=256,
+        help='size of the latent vecotor (default: 256)')
     parser.add_argument('--k', type=int, default=512,
         help='number of latent vectors (default: 512)')
 
