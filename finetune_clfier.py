@@ -10,6 +10,7 @@ from tqdm import tqdm as tqdm
 from torch import nn
 from tensorboardX import SummaryWriter
 
+from utils import accuracy
 from datasets.datasets import get_dataset
 from modules.modules import VectorQuantizedVAE
 
@@ -41,12 +42,35 @@ def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None):
 
         if writer is not None:
             # Logs
-            writer.add_scalar('loss/train/reconstruction', loss_recons.item(), args.steps)
-            writer.add_scalar('loss/train/quantization', loss_vq.item(), args.steps)
+            writer.add_scalar('loss/train', loss.item(), args.steps)
 
         optimizer.step()
         args.steps += 1
     
+def test(data_loader, model, clfy, args, writer=None):
+    with torch.no_grad():
+        loss_total = 0.
+        acc_total = 0.
+        for images, labels in tqdm(data_loader, total=len(data_loader)):
+            # print(images.shape)
+            images = images.to('cuda')
+            labels = labels.to('cuda')
+
+            latents = model.encode(images)
+            latents = model.codebook.embedding(latents).permute(0, 3, 1, 2)
+            out = clfy(latents)
+            loss_total += loss_fn(out, labels)
+            acc, = accuracy(out, labels)
+            acc_total += acc
+            if writer is not None:
+                # Logs
+                writer.add_scalar('loss/test', loss.item(), args.steps)
+
+        loss_total /= len(data_loader)
+        acc_total /= len(data_loader)
+            
+    return loss_total.item(), acc_total.item()
+
 
 def main(args):
     root = args.root
