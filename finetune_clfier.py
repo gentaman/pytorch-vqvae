@@ -72,7 +72,8 @@ def test(data_loader, model, clfy, args, writer=None, loss_fn=None):
                 latents = model.encode(images)
                 latents = model.codebook.embedding(latents).permute(0, 3, 1, 2)
             out = clfy(latents)
-            loss_total += loss_fn(out, labels)
+            loss = loss_fn(out, labels)
+            loss_total += loss
             acc, = accuracy(out, labels)
             acc_total += acc
             if writer is not None:
