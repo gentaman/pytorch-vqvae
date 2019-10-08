@@ -108,8 +108,10 @@ class ResBlock(nn.Module):
 
 
 class VectorQuantizedVAE(nn.Module):
-    def __init__(self, input_dim, dim, K=512):
+    def __init__(self, input_dim, dim, K=512, pred=False):
         super().__init__()
+        self.pred = pred
+
         self.codebook = VQEmbedding(K, dim)
 
         self.encoder = nn.Sequential(
@@ -167,7 +169,10 @@ class VectorQuantizedVAE(nn.Module):
         z_e_x = self.encoder(x)
         z_q_x_st, z_q_x = self.codebook.straight_through(z_e_x)
         x_tilde = self.decoder(z_q_x_st)
-        return x_tilde, z_e_x, z_q_x
+        if self.pred:
+            return x_tilde, z_e_x, z_q_x, z_q_x_st
+        else:
+            return x_tilde, z_e_x, z_q_x
 
 
 class GatedActivation(nn.Module):

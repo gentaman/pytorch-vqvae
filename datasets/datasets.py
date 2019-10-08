@@ -107,14 +107,14 @@ def get_dataset(dataset, data_folder, image_size=None):
             normalize])
         
         valdir = os.path.join(data_path, 'val')
-        txt_path = os.path.join(data_folder, 'val.txt')
+        txt_path = os.path.join(data_path, 'val.txt')
         dirs = glob(os.path.join(valdir, '**')+'/')
         if len(dirs) > 0:
             valid_dataset = datasets.ImageFolder(valdir, transform)
+            unique_labels = set(valid_dataset.classes)
+            valid_dataset._label_encoder = dict((label, idx) for (idx, label) in enumerate(unique_labels))
         else:
             valid_dataset = MyImageFolder(data_path, txt_path, transform)
-        unique_labels = set(valid_dataset.classes)
-        valid_dataset._label_encoder = dict((label, idx) for (idx, label) in enumerate(unique_labels))
 
         test_dataset = valid_dataset
 
