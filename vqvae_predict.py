@@ -32,7 +32,7 @@ def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None):
         # Commitment objective
         loss_commit = F.mse_loss(z_e_x, z_q_x.detach())
 
-        preds = clfy(z_q_x)
+        preds = clfy(z_q_x_st)
         # predict label
         loss_pred = loss_fn(preds, labels)
         acc, = accuracy(preds, labels)
