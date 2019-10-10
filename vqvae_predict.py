@@ -8,6 +8,7 @@ from tqdm import tqdm
 from modules.modules import VectorQuantizedVAE, to_scalar
 from modules.functions import Classifier
 
+from utils import accuracy
 from datasets.datasets import MiniImagenet, get_dataset
 
 from tensorboardX import SummaryWriter
@@ -31,9 +32,10 @@ def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None):
         # Commitment objective
         loss_commit = F.mse_loss(z_e_x, z_q_x.detach())
 
-        preds = clfy(z_q_x_st)
+        preds = clfy(z_q_x)
         # predict label
         loss_pred = loss_fn(preds, labels)
+        acc, = accuracy(preds, labels)
 
         loss = loss_recons + loss_vq + args.beta * loss_commit + args.gamma * loss_pred
         loss.backward()
@@ -43,6 +45,7 @@ def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None):
             writer.add_scalar('loss/train/reconstruction', loss_recons.item(), args.steps)
             writer.add_scalar('loss/train/quantization', loss_vq.item(), args.steps)
             writer.add_scalar('loss/train/prediction', loss_pred.item(), args.steps)
+            writer.add_scalar('accuracy/train', acc.item(), args.steps)
 
         optimizer.step()
         args.steps += 1
@@ -51,26 +54,38 @@ def test(data_loader, model, clfy, args, writer=None, loss_fn=None):
     with torch.no_grad():
         loss_recons, loss_vq = 0., 0.
         loss_pred = 0.
+        acc_total = 0.
         for images, labels in data_loader:
             images = images.to(args.device)
             labels = labels.to(args.device)
             x_tilde, z_e_x, z_q_x, z_q_x_st = model(images)
             preds = clfy(z_q_x_st)
+            acc, = accuracy(preds, labels)
 
             loss_recons += F.mse_loss(x_tilde, images)
             loss_vq += F.mse_loss(z_q_x, z_e_x)
             loss_pred += loss_fn(preds, labels)
+            acc_total += acc
 
         loss_recons /= len(data_loader)
         loss_vq /= len(data_loader)
+        loss_pred /= len(data_loader)
+        acc_total /= len(data_loader)
     
     if writer is not None:
         # Logs
         writer.add_scalar('loss/test/reconstruction', loss_recons.item(), args.steps)
         writer.add_scalar('loss/test/quantization', loss_vq.item(), args.steps)
         writer.add_scalar('loss/test/prediction', loss_pred.item(), args.steps)
+        writer.add_scalar('accuracy/test', acc_total.item(), args.steps)
 
-    return loss_recons.item(), loss_vq.item()
+    res = {
+        'recons': loss_recons.item(),
+        'vq': loss_vq.item(),
+        'pred': loss_pred.item(),
+        'acc': acc_total.item()
+    }
+    return res
 
 def generate_samples(images, model, args):
     with torch.no_grad():
@@ -99,7 +114,7 @@ def main(args):
         batch_size=args.batch_size, shuffle=False, drop_last=True,
         num_workers=args.num_workers, pin_memory=True)
     test_loader = torch.utils.data.DataLoader(test_dataset,
-        batch_size=16, shuffle=True)
+        batch_size=args.batch_size, shuffle=True)
 
     # Fixed images for Tensorboard
     fixed_images, _ = next(iter(test_loader))
@@ -112,7 +127,7 @@ def main(args):
         hidden_fmap_size = args.image_size // 4
     else:
         hidden_fmap_size = args.hidden_fmap_size
-    n_in = int(args.k * hidden_fmap_size * hidden_fmap_size)
+    n_in = int(args.hidden_size * hidden_fmap_size * hidden_fmap_size)
     n_out = len(train_dataset._label_encoder)
     predictor = Classifier(n_in, n_out).to(args.device)
 
@@ -133,9 +148,11 @@ def main(args):
     writer.add_image('reconstruction', grid, 0)
 
     best_loss = -1.
+    best_predictor = None
     for epoch in tqdm(range(args.num_epochs), total=args.num_epochs):
         train(train_loader, model, predictor, optimizer, args, writer, predictor.loss)
-        loss, _ = test(valid_loader, model, predictor, args, writer, predictor.loss)
+        losses = test(valid_loader, model, predictor, args, writer, predictor.loss)
+        loss = losses['recons']
 
         reconstruction = generate_samples(fixed_images, model, args)
         grid = make_grid(reconstruction.cpu(), nrow=8, range=(-1, 1), normalize=True)
@@ -145,8 +162,11 @@ def main(args):
             best_loss = loss
             with open('{0}/best.pt'.format(save_filename), 'wb') as f:
                 torch.save(model.state_dict(), f)
+            best_predictor = predictor.state_dict()
         with open('{0}/model_{1}.pt'.format(save_filename, epoch + 1), 'wb') as f:
             torch.save(model.state_dict(), f)
+    with open('{0}/best_predictor.pt', 'wb') as f:
+        torch.save(best_predictor, f)
 
 if __name__ == '__main__':
     import argparse
