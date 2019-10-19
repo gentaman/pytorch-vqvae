@@ -43,13 +43,14 @@ def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None):
             
         out = clfy(latents)
         loss = loss_fn(out, labels)
-        loss.backward()
         acc, = accuracy(out, labels)
+        loss.backward()
+        
 
         if writer is not None:
             # Logs
             writer.add_scalar('loss/train', loss.item(), args.steps)
-            writer.add_scalar('accuracy/train', acc, args.steps)
+            writer.add_scalar('accuracy/train', acc.item(), args.steps)
 
         optimizer.step()
         args.steps += 1
@@ -76,14 +77,14 @@ def test(data_loader, model, clfy, args, writer=None, loss_fn=None):
             loss_total += loss
             acc, = accuracy(out, labels)
             acc_total += acc
-            if writer is not None:
-                # Logs
-                writer.add_scalar('loss/test', loss.item(), args.steps)
-                writer.add_scalar('accuracy/test', acc, args.steps)
+
 
         loss_total /= len(data_loader)
         acc_total /= len(data_loader)
-            
+        if writer is not None:
+            # Logs
+            writer.add_scalar('loss/test', loss_total.item(), args.steps)
+            writer.add_scalar('accuracy/test', acc_total.item(), args.steps)
     return loss_total.item(), acc_total.item()
 
 
@@ -137,7 +138,7 @@ def main(args):
         prior = nn.DataParallel(predictor)
         cudnn.benchmark = True
         
-    optimizer = torch.optim.Adam(prior.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(predictor.parameters(), lr=args.lr)
 
     best_loss = -1.
     loss_fn = nn.CrossEntropyLoss()

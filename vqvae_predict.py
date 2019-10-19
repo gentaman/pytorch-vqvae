@@ -37,7 +37,7 @@ def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None):
         loss_pred = loss_fn(preds, labels)
         acc, = accuracy(preds, labels)
 
-        loss = loss_recons + loss_vq + args.beta * loss_commit + args.gamma * loss_pred
+        loss = args.recon_coeff * loss_recons + args.vq_coeff * loss_vq + args.beta * loss_commit + args.gamma * loss_pred
         loss.backward()
 
         if writer is not None:
@@ -165,7 +165,7 @@ def main(args):
             best_predictor = predictor.state_dict()
         with open('{0}/model_{1}.pt'.format(save_filename, epoch + 1), 'wb') as f:
             torch.save(model.state_dict(), f)
-    with open('{0}/best_predictor.pt', 'wb') as f:
+    with open('{0}/best_predictor.pt'.format(save_filename), 'wb') as f:
         torch.save(best_predictor, f)
 
 if __name__ == '__main__':
@@ -207,6 +207,10 @@ if __name__ == '__main__':
         help='contribution of commitment loss, between 0.1 and 2.0 (default: 1.0)')
     parser.add_argument('--gamma', type=float, default=1.0,
         help='contribution of prediction loss, between 0.1 and 2.0 (default: 1.0)')
+    parser.add_argument('--recon_coeff', type=float, default=1.0,
+        help='contribution of reconstruction loss, between 0.1 and 2.0 (default: 1.0)')
+    parser.add_argument('--vq_coeff', type=float, default=1.0,
+        help='contribution of vector quantization loss, between 0.1 and 2.0 (default: 1.0)')
 
     # Miscellaneous
     parser.add_argument('--root', type=str, default='.',
