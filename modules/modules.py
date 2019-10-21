@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions.normal import Normal
+from torch.distributions.uniform import Uniform
 from torch.distributions import kl_divergence
 
 from .functions import vq, vq_st
@@ -24,28 +25,22 @@ def weights_init(m):
 
 
 class VAE(nn.Module):
-    def __init__(self, input_dim, dim, z_dim):
+    def __init__(self, input_dim, dim, dist=Normal, pred=False):
         super().__init__()
         self.encoder = nn.Sequential(
             nn.Conv2d(input_dim, dim, 4, 2, 1),
             nn.BatchNorm2d(dim),
             nn.ReLU(True),
             nn.Conv2d(dim, dim, 4, 2, 1),
-            nn.BatchNorm2d(dim),
-            nn.ReLU(True),
-            nn.Conv2d(dim, dim, 5, 1, 0),
-            nn.BatchNorm2d(dim),
-            nn.ReLU(True),
-            nn.Conv2d(dim, z_dim * 2, 3, 1, 0),
-            nn.BatchNorm2d(z_dim * 2)
+            ResBlock(dim),
+            ResBlock(dim),
+            nn.Conv2d(dim, dim*2, 1),
         )
 
+
         self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(z_dim, dim, 3, 1, 0),
-            nn.BatchNorm2d(dim),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(dim, dim, 5, 1, 0),
-            nn.BatchNorm2d(dim),
+            ResBlock(dim),
+            ResBlock(dim),
             nn.ReLU(True),
             nn.ConvTranspose2d(dim, dim, 4, 2, 1),
             nn.BatchNorm2d(dim),
@@ -53,18 +48,56 @@ class VAE(nn.Module):
             nn.ConvTranspose2d(dim, input_dim, 4, 2, 1),
             nn.Tanh()
         )
+        # self.encoder = nn.Sequential(
+        #     nn.Conv2d(input_dim, dim, 4, 2, 1),
+        #     nn.BatchNorm2d(dim),
+        #     nn.ReLU(True),
+        #     nn.Conv2d(dim, dim, 4, 2, 1),
+        #     nn.BatchNorm2d(dim),
+        #     nn.ReLU(True),
+        #     nn.Conv2d(dim, dim, 5, 1, 0),
+        #     nn.BatchNorm2d(dim),
+        #     nn.ReLU(True),
+        #     nn.Conv2d(dim, z_dim * 2, 3, 1, 0),
+        #     nn.BatchNorm2d(z_dim * 2)
+        # )
+
+        # self.decoder = nn.Sequential(
+        #     nn.ConvTranspose2d(z_dim, dim, 3, 1, 0),
+        #     nn.BatchNorm2d(dim),
+        #     nn.ReLU(True),
+        #     nn.ConvTranspose2d(dim, dim, 5, 1, 0),
+        #     nn.BatchNorm2d(dim),
+        #     nn.ReLU(True),
+        #     nn.ConvTranspose2d(dim, dim, 4, 2, 1),
+        #     nn.BatchNorm2d(dim),
+        #     nn.ReLU(True),
+        #     nn.ConvTranspose2d(dim, input_dim, 4, 2, 1),
+        #     nn.Tanh()
+        # )
 
         self.apply(weights_init)
+        self.pred = pred
+        if isinstance(dist, str):
+            if dist == 'uniform':
+                self.dist = lambda s, l: Uniform(-s + l, s + l)
+            if dist == 'normal':
+                self.dist = Normal
+        else:
+            self.dist = dist
 
     def forward(self, x):
         mu, logvar = self.encoder(x).chunk(2, dim=1)
 
-        q_z_x = Normal(mu, logvar.mul(.5).exp())
-        p_z = Normal(torch.zeros_like(mu), torch.ones_like(logvar))
+        q_z_x = self.dist(mu, logvar.mul(.5).exp())
+        p_z = self.dist(torch.zeros_like(mu), torch.ones_like(logvar))
         kl_div = kl_divergence(q_z_x, p_z).sum(1).mean()
-
-        x_tilde = self.decoder(q_z_x.rsample())
-        return x_tilde, kl_div
+        sample = q_z_x.rsample()
+        x_tilde = self.decoder(sample)
+        if self.pred:
+            return x_tilde, kl_div, sample
+        else:
+            return x_tilde, kl_div
 
 
 class VQEmbedding(nn.Module):
