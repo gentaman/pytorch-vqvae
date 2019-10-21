@@ -17,7 +17,7 @@ from tensorboardX import SummaryWriter
 
 def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None):
     for images, labels in tqdm(data_loader, total=len(data_loader)):
-        # print(images.shape)
+        # print(images.shape) 
         images = images.to(args.device)
         labels = labels.to(args.device)
 
@@ -127,9 +127,12 @@ def main(args):
         hidden_fmap_size = args.image_size // 4
     else:
         hidden_fmap_size = args.hidden_fmap_size
-    n_in = int(args.hidden_size * hidden_fmap_size * hidden_fmap_size)
+    if args.gap:
+        n_in = args.hidden_size
+    else:
+        n_in = int(args.hidden_size * hidden_fmap_size * hidden_fmap_size)
     n_out = len(train_dataset._label_encoder)
-    predictor = Classifier(n_in, n_out).to(args.device)
+    predictor = Classifier(n_in, n_out, gap=args.gap).to(args.device)
 
     if args.model:
         print("load model ==> {}".format(args.model))
@@ -185,7 +188,8 @@ if __name__ == '__main__':
         help='size of the input image (default: 128)')
     parser.add_argument('--model', type=str, default='',
         help='filename containing the model')
-
+    parser.add_argument('--gap', action='store_true',
+        help='add GAP')
 
     # Latent space
     parser.add_argument('--hidden-size', type=int, default=256,
