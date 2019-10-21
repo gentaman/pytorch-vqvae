@@ -3,12 +3,18 @@ from torch.autograd import Function
 from torch import nn
 
 class Classifier(nn.Module):
-    def __init__(self, in_f, out_f):
+    def __init__(self, in_f, out_f, gap=False):
         super(Classifier, self).__init__()
+        if gap:
+            self.gap = nn.AdaptiveMaxPool2d((1, 1))
+        else:
+            self.gap = None
         self.fc = nn.Linear(in_f, out_f)
         self.loss = nn.CrossEntropyLoss()
     
     def forward(self, x):
+        if self.gap is not None:
+            x = self.gap(x)
         x = x.contiguous().view(x.size(0), -1)
         x = self.fc(x)
         return x
