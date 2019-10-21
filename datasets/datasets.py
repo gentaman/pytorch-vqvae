@@ -28,7 +28,12 @@ def get_dataset(dataset, data_folder, image_size=None):
         ])
         if dataset == 'mnist':
             # Define the train & test datasets
+            if image_size is None:
+                image_size = 28
             transform = transforms.Compose([
+                # transforms.RandomResizedCrop((image_size, image_size)),
+                transforms.Resize((image_size+ image_size//16, image_size + image_size//16)),
+                transforms.RandomResizedCrop((image_size, image_size), scale=(0.8, 1.0)),
                 transforms.ToTensor(),
                 transforms.Normalize(mean=[0.5], std=[0.5])
             ])
@@ -37,6 +42,10 @@ def get_dataset(dataset, data_folder, image_size=None):
             test_dataset = datasets.MNIST(data_folder, train=False,
                 transform=transform)
             num_channels = 1
+            unique_labels = set(train_dataset.classes)
+            train_dataset._label_encoder = dict((label, idx) for (idx, label) in enumerate(unique_labels))
+            test_dataset._label_encoder = train_dataset._label_encoder
+            valid_dataset = test_dataset
         elif dataset == 'fashion-mnist':
             # Define the train & test datasets
             transform = transforms.Compose([
