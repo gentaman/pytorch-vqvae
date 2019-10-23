@@ -24,6 +24,41 @@ def weights_init(m):
             print("Skipping initialization of ", classname)
 
 
+class AE(nn.Module):
+    def __init__(self, input_dim, dim, pred=False, transpose=False):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Conv2d(input_dim, dim, 4, 2, 1),
+            nn.BatchNorm2d(dim),
+            nn.ReLU(True),
+            nn.Conv2d(dim, dim, 4, 2, 1),
+            ResBlock(dim),
+            ResBlock(dim),
+        )
+
+
+        self.decoder = nn.Sequential(
+            ResBlock(dim, transpose),
+            ResBlock(dim, transpose),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(dim, dim, 4, 2, 1),
+            nn.BatchNorm2d(dim),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(dim, input_dim, 4, 2, 1),
+            nn.Tanh()
+        )
+
+        self.apply(weights_init)
+        self.pred = pred
+
+    def forward(self, x):
+        h = self.encoder(x)
+        x_tilde = self.decoder(h)
+        if self.pred:
+            return x_tilde, h
+        else:
+            return x_tilde,
+
 class VAE(nn.Module):
     def __init__(self, input_dim, dim, dist=Normal, pred=False):
         super().__init__()
@@ -125,23 +160,45 @@ class VQEmbedding(nn.Module):
 
 
 class ResBlock(nn.Module):
-    def __init__(self, dim):
+    def __init__(self, dim, transpose=False):
         super().__init__()
-        self.block = nn.Sequential(
-            nn.ReLU(True),
-            nn.Conv2d(dim, dim, 3, 1, 1),
-            nn.BatchNorm2d(dim),
-            nn.ReLU(True),
-            nn.Conv2d(dim, dim, 1),
-            nn.BatchNorm2d(dim)
-        )
+        self.transpose = transpose
+        if self.transpose:
+            self.block = nn.Sequential(
+                nn.ReLU(True),
+                nn.ConvTranspose2d(dim, dim, 1),
+                nn.BatchNorm2d(dim),
+                nn.ReLU(True),
+                nn.ConvTranspose2d(dim, dim, 3, 1),
+                nn.BatchNorm2d(dim)
+            )
+        else:
+            self.block = nn.Sequential(
+                nn.ReLU(True),
+                nn.Conv2d(dim, dim, 3, 1, 1),
+                nn.BatchNorm2d(dim),
+                nn.ReLU(True),
+                nn.Conv2d(dim, dim, 1),
+                nn.BatchNorm2d(dim)
+            )
 
     def forward(self, x):
-        return x + self.block(x)
+        h = x 
+        cnt = 0
+        for b in self.block:
+            if self.transpose and isinstance(b, nn.ConvTranspose2d):
+                # h = b(h, output_size=x.size())
+                h = b(h)
+                if cnt == 1:
+                    h = h[:, :, 0:x.size(2), 0:x.size(3)]
+                cnt += 1
+            else:
+                h = b(h)
+        return x + h
 
 
 class VectorQuantizedVAE(nn.Module):
-    def __init__(self, input_dim, dim, K=512, pred=False):
+    def __init__(self, input_dim, dim, K=512, pred=False, transpose=False):
         super().__init__()
         self.pred = pred
 
@@ -158,8 +215,8 @@ class VectorQuantizedVAE(nn.Module):
 
 
         self.decoder = nn.Sequential(
-            ResBlock(dim),
-            ResBlock(dim),
+            ResBlock(dim, transpose),
+            ResBlock(dim, transpose),
             nn.ReLU(True),
             nn.ConvTranspose2d(dim, dim, 4, 2, 1),
             nn.BatchNorm2d(dim),
