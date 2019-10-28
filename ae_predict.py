@@ -10,6 +10,7 @@ from modules.functions import Classifier
 from datasets.datasets import MiniImagenet, get_dataset
 
 from utils import accuracy
+from utils import copy_model
 from tensorboardX import SummaryWriter
 
 def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None):
@@ -138,7 +139,16 @@ def main(args):
         print("load model ==> {}".format(args.model))
         with open(args.model, 'rb') as f:
             state_dict = torch.load(f)
-            model.load_state_dict(state_dict)
+            try:
+                model = copy_model(state_dict, model, verbose=1)
+            except:
+                model.load_state_dict(state_dict)
+    if args.predictor:
+        print("load predictor ==> {}".format(args.model))
+        with open(args.predictor, 'rb') as f:
+            state_dict = torch.load(f)
+            predictor.load_state_dict(state_dict)
+
     optimizer = torch.optim.Adam([
             {'params': model.parameters()},
             {'params': predictor.parameters()}],
@@ -150,6 +160,12 @@ def main(args):
     grid = make_grid(reconstruction.cpu(), nrow=8, range=(-1, 1), normalize=True)
     writer.add_image('reconstruction', grid, 0)
 
+
+    with open(os.path.join(save_filename, 'init.model.pt'), 'wb') as f:
+        torch.save(model.state_dict(), f)
+    with open(os.path.join(save_filename, 'init.predictor.pt'), 'wb') as f:
+        torch.save(predictor.state_dict(), f)
+    
     best_loss = -1.
     for epoch in tqdm(range(args.num_epochs), total=args.num_epochs):
         train(train_loader, model, predictor, optimizer, args, writer, predictor.loss)
@@ -190,6 +206,8 @@ if __name__ == '__main__':
         help='size of the input image (default: 128)')
     parser.add_argument('--model', type=str, default='',
         help='filename containing the model')
+    parser.add_argument('--predictor', type=str, default='',
+        help='filename containing the preditor')
     parser.add_argument('--gap', action='store_true',
         help='add GAP')
     parser.add_argument('--resblock-transpose', action='store_true',
