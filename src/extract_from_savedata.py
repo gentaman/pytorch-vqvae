@@ -15,6 +15,13 @@ def main(root_path, out_dir):
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 
+    recon_coeff = 1.0
+    vq_coeff = 1.0
+    beta = 1.0
+    gamma = 1.0
+    
+
+
     datas = {}
     for fname in os.listdir(root_path):
         path = os.path.join(root_path, fname)
@@ -29,6 +36,35 @@ def main(root_path, out_dir):
             events = event_acc.Scalars(s_tag)
             scalars[s_tag] = np.asarray([event.value for event in events])
         
+        # calc total loss
+        if '_ae_' in fname:
+            # ae
+            a = recon_coeff
+            b = 0
+            c = 0
+            d = gamma
+        else:
+            # vqvae
+            a = recon_coeff
+            b = vq_coeff
+            c = beta
+            d = gamma
+
+        if 'no_recon' in fname:
+            a = 0
+        if 'no_pred' in fname:
+            d = 0
+        
+        if 'loss/train/quantization' in scalars:
+            scalars['loss/train'] = a * scalars['loss/train/reconstruction'] + (b + c) * scalars['loss/train/quantization'] + d * scalars['loss/train/prediction']
+        else:
+            scalars['loss/train'] = a * scalars['loss/train/reconstruction'] + d * scalars['loss/train/prediction']
+
+        if 'loss/test/quantization' in scalars:
+            scalars['loss/test'] = a * scalars['loss/test/reconstruction'] + (b + c) * scalars['loss/test/quantization'] + d * scalars['loss/test/prediction']
+        else:
+            scalars['loss/test'] = a * scalars['loss/test/reconstruction'] + d * scalars['loss/test/prediction']
+
         datas[fname] = scalars
         
         out_dir_fname = os.path.join(out_dir, fname)
@@ -54,7 +90,11 @@ if __name__ == '__main__':
     import sys
 
     root_path = sys.argv[1]
-    out_dir = sys.argv[2]
+    if len(sys.argv) <= 2:
+        dirname = os.path.dirname(root_path.rstrip('/'))
+        out_dir = os.path.join(dirname, 'datas')
+    else:
+        out_dir = sys.argv[2]
 
     main(root_path, out_dir)
 
