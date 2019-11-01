@@ -25,28 +25,33 @@ def weights_init(m):
 
 
 class AE(nn.Module):
-    def __init__(self, input_dim, dim, pred=False, transpose=False):
+    def __init__(self, input_dim, dim, pred=False, transpose=False, BN=True):
         super().__init__()
-        self.encoder = nn.Sequential(
+
+        connections = [
             nn.Conv2d(input_dim, dim, 4, 2, 1),
             nn.BatchNorm2d(dim),
             nn.ReLU(True),
             nn.Conv2d(dim, dim, 4, 2, 1),
-            ResBlock(dim),
-            ResBlock(dim),
-        )
+            ResBlock(dim, BN=BN),
+            ResBlock(dim, BN=BN),
+        ]
+        if not BN:
+            connections = list(filter(lambda x: not isinstance(x, nn.BatchNorm2d), connections))
+        self.encoder = nn.Sequential(*connections)
 
-
-        self.decoder = nn.Sequential(
-            ResBlock(dim, transpose),
-            ResBlock(dim, transpose),
+        connections = [
+            ResBlock(dim, transpose, BN=BN),
+            ResBlock(dim, transpose, BN=BN),
             nn.ReLU(True),
             nn.ConvTranspose2d(dim, dim, 4, 2, 1),
             nn.BatchNorm2d(dim),
             nn.ReLU(True),
             nn.ConvTranspose2d(dim, input_dim, 4, 2, 1),
-            nn.Tanh()
-        )
+            nn.Tanh()        ]
+        if not BN:
+            connections = list(filter(lambda x: not isinstance(x, nn.BatchNorm2d), connections))
+        self.decoder = nn.Sequential(*connections)
 
         self.apply(weights_init)
         self.pred = pred
@@ -60,56 +65,33 @@ class AE(nn.Module):
             return x_tilde,
 
 class VAE(nn.Module):
-    def __init__(self, input_dim, dim, dist=Normal, pred=False):
+    def __init__(self, input_dim, dim, dist=Normal, pred=False, transpose=False, BN=True):
         super().__init__()
-        self.encoder = nn.Sequential(
+
+        connections = [
             nn.Conv2d(input_dim, dim, 4, 2, 1),
             nn.BatchNorm2d(dim),
             nn.ReLU(True),
             nn.Conv2d(dim, dim, 4, 2, 1),
-            ResBlock(dim),
-            ResBlock(dim),
-            nn.Conv2d(dim, dim*2, 1),
-        )
+            ResBlock(dim, BN=BN),
+            ResBlock(dim, BN=BN),
+        ]
+        if not BN:
+            connections = list(filter(lambda x: not isinstance(x, nn.BatchNorm2d), connections))
+        self.encoder = nn.Sequential(*connections)
 
-
-        self.decoder = nn.Sequential(
-            ResBlock(dim),
-            ResBlock(dim),
+        connections = [
+            ResBlock(dim, transpose, BN=BN),
+            ResBlock(dim, transpose, BN=BN),
             nn.ReLU(True),
             nn.ConvTranspose2d(dim, dim, 4, 2, 1),
             nn.BatchNorm2d(dim),
             nn.ReLU(True),
             nn.ConvTranspose2d(dim, input_dim, 4, 2, 1),
-            nn.Tanh()
-        )
-        # self.encoder = nn.Sequential(
-        #     nn.Conv2d(input_dim, dim, 4, 2, 1),
-        #     nn.BatchNorm2d(dim),
-        #     nn.ReLU(True),
-        #     nn.Conv2d(dim, dim, 4, 2, 1),
-        #     nn.BatchNorm2d(dim),
-        #     nn.ReLU(True),
-        #     nn.Conv2d(dim, dim, 5, 1, 0),
-        #     nn.BatchNorm2d(dim),
-        #     nn.ReLU(True),
-        #     nn.Conv2d(dim, z_dim * 2, 3, 1, 0),
-        #     nn.BatchNorm2d(z_dim * 2)
-        # )
-
-        # self.decoder = nn.Sequential(
-        #     nn.ConvTranspose2d(z_dim, dim, 3, 1, 0),
-        #     nn.BatchNorm2d(dim),
-        #     nn.ReLU(True),
-        #     nn.ConvTranspose2d(dim, dim, 5, 1, 0),
-        #     nn.BatchNorm2d(dim),
-        #     nn.ReLU(True),
-        #     nn.ConvTranspose2d(dim, dim, 4, 2, 1),
-        #     nn.BatchNorm2d(dim),
-        #     nn.ReLU(True),
-        #     nn.ConvTranspose2d(dim, input_dim, 4, 2, 1),
-        #     nn.Tanh()
-        # )
+            nn.Tanh()        ]
+        if not BN:
+            connections = list(filter(lambda x: not isinstance(x, nn.BatchNorm2d), connections))
+        self.decoder = nn.Sequential(*connections)
 
         self.apply(weights_init)
         self.pred = pred
@@ -160,27 +142,31 @@ class VQEmbedding(nn.Module):
 
 
 class ResBlock(nn.Module):
-    def __init__(self, dim, transpose=False):
+    def __init__(self, dim, transpose=False, BN=True):
         super().__init__()
         self.transpose = transpose
         if self.transpose:
-            self.block = nn.Sequential(
+            connections = [
                 nn.ReLU(True),
                 nn.ConvTranspose2d(dim, dim, 1),
                 nn.BatchNorm2d(dim),
                 nn.ReLU(True),
                 nn.ConvTranspose2d(dim, dim, 3, 1),
                 nn.BatchNorm2d(dim)
-            )
+            ]
         else:
-            self.block = nn.Sequential(
+            connections = [
                 nn.ReLU(True),
                 nn.Conv2d(dim, dim, 3, 1, 1),
                 nn.BatchNorm2d(dim),
                 nn.ReLU(True),
                 nn.Conv2d(dim, dim, 1),
                 nn.BatchNorm2d(dim)
-            )
+            ]
+        if not BN:
+            connections = list(filter(lambda x: not isinstance(x, nn.BatchNorm2d), connections))
+
+        self.block = nn.Sequential(*connections)
 
     def forward(self, x):
         h = x 
@@ -198,50 +184,36 @@ class ResBlock(nn.Module):
 
 
 class VectorQuantizedVAE(nn.Module):
-    def __init__(self, input_dim, dim, K=512, pred=False, transpose=False):
+    def __init__(self, input_dim, dim, K=512, pred=False, transpose=False, BN=True):
         super().__init__()
         self.pred = pred
 
         self.codebook = VQEmbedding(K, dim)
 
-        self.encoder = nn.Sequential(
+        connections = [
             nn.Conv2d(input_dim, dim, 4, 2, 1),
             nn.BatchNorm2d(dim),
             nn.ReLU(True),
             nn.Conv2d(dim, dim, 4, 2, 1),
-            ResBlock(dim),
-            ResBlock(dim),
-        )
+            ResBlock(dim, BN=BN),
+            ResBlock(dim, BN=BN),
+        ]
+        if not BN:
+            connections = list(filter(lambda x: not isinstance(x, nn.BatchNorm2d), connections))
+        self.encoder = nn.Sequential(*connections)
 
-
-        self.decoder = nn.Sequential(
-            ResBlock(dim, transpose),
-            ResBlock(dim, transpose),
+        connections = [
+            ResBlock(dim, transpose, BN=BN),
+            ResBlock(dim, transpose, BN=BN),
             nn.ReLU(True),
             nn.ConvTranspose2d(dim, dim, 4, 2, 1),
             nn.BatchNorm2d(dim),
             nn.ReLU(True),
             nn.ConvTranspose2d(dim, input_dim, 4, 2, 1),
-            nn.Tanh()
-        )
-        # self.encoder = nn.Sequential(
-        #     nn.Conv2d(input_dim, dim, 4, 2, 0),
-        #     nn.BatchNorm2d(dim),
-        #     nn.ReLU(True),
-        #     nn.Conv2d(dim, dim, 4, 2, 0),
-        #     ResBlock(dim),
-        #     ResBlock(dim),
-        # )
-        # self.decoder = nn.Sequential(
-        #     ResBlock(dim),
-        #     ResBlock(dim),
-        #     nn.ReLU(True),
-        #     nn.ConvTranspose2d(dim, dim, 4, 2, 0),
-        #     nn.BatchNorm2d(dim),
-        #     nn.ReLU(True),
-        #     nn.ConvTranspose2d(dim, input_dim, 4, 2, 0),
-        #     nn.Tanh()
-        # )
+            nn.Tanh()        ]
+        if not BN:
+            connections = list(filter(lambda x: not isinstance(x, nn.BatchNorm2d), connections))
+        self.decoder = nn.Sequential(*connections)
 
         self.apply(weights_init)
 
