@@ -67,21 +67,38 @@ def reconstruct_sample(model, images, labels, predictor, out_dir, prefix=None, m
         plt.close()
 
 
-def plot_codebooks(model, fmap_size, out_dir, device='cuda'):
+def plot_codebooks(model, fmap_size, out_dir, device='cuda', each_normalize=True):
     make_dir(out_dir)
     em_weight = model.codebook.embedding.weight.cpu().detach().numpy()
     k, hidden_size = em_weight.shape
+    vmin = np.inf
+    vmax = -np.inf
+    outs = []
+    for j in range((fmap_size)**2):
+        d = torch.zeros(k, hidden_size, fmap_size, fmap_size)
+        h_index, w_index = np.unravel_index(j, (fmap_size, fmap_size))
+        d[:, :, h_index, w_index] = torch.Tensor(em_weight)
+        out = model.decoder(d.to(device))
+        outs.append(out.cpu())
+        if not each_normalize:
+            if vmin > out1.min():
+                vmin = out1.min()
+            if vmax < out1.max():
+                vmax = out1.max()
 
     for i in range(k):
         plt.figure(figsize=(16, 16))
         for j in range((fmap_size)**2):
-            d = torch.zeros(k, hidden_size, fmap_size, fmap_size)
-            h_index, w_index = np.unravel_index(j, (fmap_size, fmap_size))
-            d[:, :, h_index, w_index] = torch.Tensor(em_weight)
-            out1 = model.decoder(d.to(device))
+            # d = torch.zeros(k, hidden_size, fmap_size, fmap_size)
+            # h_index, w_index = np.unravel_index(j, (fmap_size, fmap_size))
+            # d[:, :, h_index, w_index] = torch.Tensor(em_weight)
+            # out1 = model.decoder(d.to(device))
             plt.subplot(fmap_size, fmap_size, j+1)
             plt.title('index: {}-{}'.format(h_index, w_index))
-            plt.imshow(out1[i, 0].cpu().detach().numpy())
+            if each_normalize:
+                plt.imshow(outs[j][i, 0].cpu().detach().numpy())
+            else:
+                plt.imshow(outs[j][i, 0].cpu().detach().numpy(), vmin=vmin, vmax=vmax)
             plt.axis('off')
         plt.tight_layout()
         out_path = os.path.join(out_dir, '{}-{}-{}.png'.format(str(i).zfill(3), h_index, w_index))
@@ -97,7 +114,7 @@ def plot_perform_model(args, num_channels, n_out, data_loader, model_path, predi
 
 
     model = VectorQuantizedVAE(
-        num_channels, args.hidden_size, args.k, pred=True, transpose=args.resblock_transpose
+        num_channels, args.hidden_size, args.k, pred=True, transpose=args.resblock_transpose, BN=args.BN
         ).to(args.device)
 
     if args.hidden_fmap_size is None:
@@ -137,8 +154,11 @@ def plot_perform_model(args, num_channels, n_out, data_loader, model_path, predi
     reconstruct_sample(model, images.to(args.device), labels, predictor, out_dir)
 
     print('generate codebook')
-    out_dir = os.path.join(path, 'gen_codebook')
-    plot_codebooks(model, args.image_size//8, out_dir, device=args.device)
+    if args.each_normalize:
+        out_dir = os.path.join(path, 'gen_codebook')
+    else:
+        out_dir = os.path.join(path, 'gen_codebook_norm')
+    plot_codebooks(model, args.image_size//8, out_dir, device=args.device, each_normalize=args.each_normalize)
 
 
 def main(args):
@@ -192,6 +212,9 @@ if __name__ == '__main__':
         help='filename containing the predictor')
     parser.add_argument('--gap', action='store_true',
         help='add GAP')
+    parser.add_argument('--off-bn', dest='BN', action='store_false',
+        help='disable Batch Noramalization')
+
     parser.add_argument('--resblock-transpose', action='store_true',
         help='apply conv transpose to ResBlock')
 
@@ -229,6 +252,10 @@ if __name__ == '__main__':
         help='number of workers for trajectories sampling (default: {0})'.format(mp.cpu_count() - 1))
     parser.add_argument('--device', type=str, default='cpu',
         help='set the device (cpu or cuda, default: cpu)')
+
+    parser.add_argument('--off-eachnorm', dest='each_normalize', action='store_false',
+        help='disable noramalization of visualizing image')
+
 
     args = parser.parse_args()
 

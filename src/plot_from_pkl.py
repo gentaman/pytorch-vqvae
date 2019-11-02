@@ -265,7 +265,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.output_folder is None:
-        dirname = os.path.dirname(args.scalars)
+        dirname = os.path.dirname(args.scalars[0])
         dir_path = os.path.dirname(dirname)
 
         args.output_folder = os.path.join(dir_path, 'imgs')
