@@ -122,7 +122,7 @@ def main(args):
     writer.add_image('original', fixed_grid, 0)
 
     model = VectorQuantizedVAE(
-        num_channels, args.hidden_size, args.k, pred=True, transpose=args.resblock_transpose, BN=args.BN
+        num_channels, args.hidden_size, args.k, pred=True, transpose=args.resblock_transpose, BN=args.BN, bias=args.bias
         ).to(args.device)
 
     if args.hidden_fmap_size is None:
@@ -209,6 +209,8 @@ if __name__ == '__main__':
     parser.add_argument('--gap', action='store_true',
         help='add GAP')
     parser.add_argument('--off-bn', dest='BN', action='store_false',
+        help='disable Batch Noramalization')
+    parser.add_argument('--off-bias', dest='bias', action='store_false',
         help='disable Batch Noramalization')
     parser.add_argument('--resblock-transpose', action='store_true',
         help='apply conv transpose to ResBlock')

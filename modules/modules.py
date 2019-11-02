@@ -19,10 +19,13 @@ def weights_init(m):
     if classname.find('Conv') != -1:
         try:
             nn.init.xavier_uniform_(m.weight.data)
+        except AttributeError:
+            print("Skipping weight initialization of ", classname)
+
+        try:
             m.bias.data.fill_(0)
         except AttributeError:
-            print("Skipping initialization of ", classname)
-
+            print("Skipping bias initialization of ", classname)
 
 class AE(nn.Module):
     def __init__(self, input_dim, dim, pred=False, transpose=False, BN=True):
@@ -142,25 +145,25 @@ class VQEmbedding(nn.Module):
 
 
 class ResBlock(nn.Module):
-    def __init__(self, dim, transpose=False, BN=True):
+    def __init__(self, dim, transpose=False, BN=True, bias=True):
         super().__init__()
         self.transpose = transpose
         if self.transpose:
             connections = [
                 nn.ReLU(True),
-                nn.ConvTranspose2d(dim, dim, 1),
+                nn.ConvTranspose2d(dim, dim, 1, bias=bias),
                 nn.BatchNorm2d(dim),
                 nn.ReLU(True),
-                nn.ConvTranspose2d(dim, dim, 3, 1),
+                nn.ConvTranspose2d(dim, dim, 3, 1, bias=bias),
                 nn.BatchNorm2d(dim)
             ]
         else:
             connections = [
                 nn.ReLU(True),
-                nn.Conv2d(dim, dim, 3, 1, 1),
+                nn.Conv2d(dim, dim, 3, 1, 1, bias=bias),
                 nn.BatchNorm2d(dim),
                 nn.ReLU(True),
-                nn.Conv2d(dim, dim, 1),
+                nn.Conv2d(dim, dim, 1, bias=bias),
                 nn.BatchNorm2d(dim)
             ]
         if not BN:
@@ -184,32 +187,32 @@ class ResBlock(nn.Module):
 
 
 class VectorQuantizedVAE(nn.Module):
-    def __init__(self, input_dim, dim, K=512, pred=False, transpose=False, BN=True):
+    def __init__(self, input_dim, dim, K=512, pred=False, transpose=False, BN=True, bias=True):
         super().__init__()
         self.pred = pred
 
         self.codebook = VQEmbedding(K, dim)
 
         connections = [
-            nn.Conv2d(input_dim, dim, 4, 2, 1),
+            nn.Conv2d(input_dim, dim, 4, 2, 1, bias=bias),
             nn.BatchNorm2d(dim),
             nn.ReLU(True),
-            nn.Conv2d(dim, dim, 4, 2, 1),
-            ResBlock(dim, BN=BN),
-            ResBlock(dim, BN=BN),
+            nn.Conv2d(dim, dim, 4, 2, 1, bias=bias),
+            ResBlock(dim, BN=BN, bias=bias),
+            ResBlock(dim, BN=BN, bias=bias),
         ]
         if not BN:
             connections = list(filter(lambda x: not isinstance(x, nn.BatchNorm2d), connections))
         self.encoder = nn.Sequential(*connections)
 
         connections = [
-            ResBlock(dim, transpose, BN=BN),
-            ResBlock(dim, transpose, BN=BN),
+            ResBlock(dim, transpose, BN=BN, bias=bias),
+            ResBlock(dim, transpose, BN=BN, bias=bias),
             nn.ReLU(True),
-            nn.ConvTranspose2d(dim, dim, 4, 2, 1),
+            nn.ConvTranspose2d(dim, dim, 4, 2, 1, bias=bias),
             nn.BatchNorm2d(dim),
             nn.ReLU(True),
-            nn.ConvTranspose2d(dim, input_dim, 4, 2, 1),
+            nn.ConvTranspose2d(dim, input_dim, 4, 2, 1, bias=bias),
             nn.Tanh()        ]
         if not BN:
             connections = list(filter(lambda x: not isinstance(x, nn.BatchNorm2d), connections))

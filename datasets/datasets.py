@@ -47,16 +47,24 @@ def get_dataset(dataset, data_folder, image_size=None):
             test_dataset._label_encoder = train_dataset._label_encoder
             valid_dataset = test_dataset
         elif dataset == 'fashion-mnist':
-            # Define the train & test datasets
+            if image_size is None:
+                image_size = 28
             transform = transforms.Compose([
+                # transforms.RandomResizedCrop((image_size, image_size)),
+                transforms.Resize((image_size+ image_size//16, image_size + image_size//16)),
+                transforms.RandomResizedCrop((image_size, image_size), scale=(0.8, 1.0)),
                 transforms.ToTensor(),
-                transforms.Normalize((0.5), (0.5))
+                transforms.Normalize(mean=[0.5], std=[0.5])
             ])
             train_dataset = datasets.FashionMNIST(data_folder,
                 train=True, download=True, transform=transform)
             test_dataset = datasets.FashionMNIST(data_folder,
                 train=False, transform=transform)
             num_channels = 1
+            unique_labels = set(train_dataset.classes)
+            train_dataset._label_encoder = dict((label, idx) for (idx, label) in enumerate(unique_labels))
+            test_dataset._label_encoder = train_dataset._label_encoder
+            valid_dataset = test_dataset
         elif dataset == 'cifar10':
             # Define the train & test datasets
             train_dataset = datasets.CIFAR10(data_folder,
