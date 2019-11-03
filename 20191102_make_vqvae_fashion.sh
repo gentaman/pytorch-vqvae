@@ -23,5 +23,5 @@ max=$i
 for ((i=1; i < $max; i++))
 do
     echo ${output_dir[$i]}
-    python vqvae_predict.py --data-folder ~/data2/dataset/ --dataset fashion-mnist --image-size 64 --hidden-size 256 --num-epochs 100 --root ~/data2/${out_prefix}_vqvae/ --output-folder ${output_dir[$i]} --gap --k ${k} --device cuda --batch-size 256 --resblock-transpose ${args[$i]} --predictor ${init_predictor} --model ${init_model} --off-bn
+    python vqvae_predict.py --data-folder ~/data2/dataset/ --dataset fashion-mnist --image-size 64 --hidden-size 256 --num-epochs 100 --root ~/data2/${out_prefix}_vqvae/ --output-folder ${output_dir[$i]} --gap --k ${k} --device cuda --batch-size 256 --resblock-transpose ${args[$i]} --predictor ${init_predictor} --model ${init_model} --off-bn --off-bias
 done
