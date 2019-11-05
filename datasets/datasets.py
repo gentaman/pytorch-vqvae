@@ -20,7 +20,7 @@ def pil_loader(path):
         return img.convert('RGB')
 
 
-def get_dataset(dataset, data_folder, image_size=None):
+def get_dataset(dataset, data_folder, image_size=None, DA=True):
     if dataset in ['mnist', 'fashion-mnist', 'cifar10']:
         transform = transforms.Compose([
             transforms.ToTensor(),
@@ -30,15 +30,25 @@ def get_dataset(dataset, data_folder, image_size=None):
             # Define the train & test datasets
             if image_size is None:
                 image_size = 28
+            if DA:
+                transform = transforms.Compose([
+                    # transforms.RandomResizedCrop((image_size, image_size)),
+                    transforms.Resize((image_size+ image_size//16, image_size + image_size//16)),
+                    transforms.RandomResizedCrop((image_size, image_size), scale=(0.8, 1.0)),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=[0.5], std=[0.5])
+                ])
+            else:
+                transform = transforms.Compose([
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=[0.5], std=[0.5])
+                ])
+            train_dataset = datasets.MNIST(data_folder, train=True,
+                download=True, transform=transform)
             transform = transforms.Compose([
-                # transforms.RandomResizedCrop((image_size, image_size)),
-                transforms.Resize((image_size+ image_size//16, image_size + image_size//16)),
-                transforms.RandomResizedCrop((image_size, image_size), scale=(0.8, 1.0)),
                 transforms.ToTensor(),
                 transforms.Normalize(mean=[0.5], std=[0.5])
             ])
-            train_dataset = datasets.MNIST(data_folder, train=True,
-                download=True, transform=transform)
             test_dataset = datasets.MNIST(data_folder, train=False,
                 transform=transform)
             num_channels = 1
@@ -49,15 +59,25 @@ def get_dataset(dataset, data_folder, image_size=None):
         elif dataset == 'fashion-mnist':
             if image_size is None:
                 image_size = 28
+            if DA:
+                transform = transforms.Compose([
+                    # transforms.RandomResizedCrop((image_size, image_size)),
+                    transforms.Resize((image_size+ image_size//16, image_size + image_size//16)),
+                    transforms.RandomResizedCrop((image_size, image_size), scale=(0.8, 1.0)),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=[0.5], std=[0.5])
+                ])
+            else:
+                transform = transforms.Compose([
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=[0.5], std=[0.5])
+                ])
+            train_dataset = datasets.FashionMNIST(data_folder,
+                train=True, download=True, transform=transform)
             transform = transforms.Compose([
-                # transforms.RandomResizedCrop((image_size, image_size)),
-                transforms.Resize((image_size+ image_size//16, image_size + image_size//16)),
-                transforms.RandomResizedCrop((image_size, image_size), scale=(0.8, 1.0)),
                 transforms.ToTensor(),
                 transforms.Normalize(mean=[0.5], std=[0.5])
             ])
-            train_dataset = datasets.FashionMNIST(data_folder,
-                train=True, download=True, transform=transform)
             test_dataset = datasets.FashionMNIST(data_folder,
                 train=False, transform=transform)
             num_channels = 1

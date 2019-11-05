@@ -99,7 +99,7 @@ def main(args):
     writer = SummaryWriter(path)
     save_filename = os.path.join(root, 'models', args.output_folder)
     
-    result = get_dataset(args.dataset, args.data_folder, image_size=args.image_size)
+    result = get_dataset(args.dataset, args.data_folder, image_size=args.image_size, DA=args.data_augument)
 
     train_dataset = result['train']
     test_dataset = result['test']
