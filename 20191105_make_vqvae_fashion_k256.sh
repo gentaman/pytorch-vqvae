@@ -1,4 +1,6 @@
 
+# DISABLE Data Augumentation
+
 out_prefix='20191105_vqvae'
 
 
@@ -28,6 +30,6 @@ do
     for ((i=1; i < $max; i++))
     do
         echo ${output_dir[$i]}
-        python vqvae_predict.py --data-folder ~/data2/dataset/ --dataset $dataset --image-size 64 --hidden-size 256 --num-epochs 100 --root ~/data2/${out_prefix}_vqvae/ --output-folder ${output_dir[$i]} --gap --k ${k[$j]} --device cuda --batch-size 256 --resblock-transpose ${args[$i]} --predictor ${init_predictor} --model ${init_model}
+        python vqvae_predict.py --data-folder ~/data2/dataset/ --dataset $dataset --image-size 64 --hidden-size 256 --num-epochs 100 --root ~/data2/${out_prefix}_vqvae/ --output-folder ${output_dir[$i]} --gap --k ${k[$j]} --device cuda --batch-size 256 --resblock-transpose ${args[$i]} --predictor ${init_predictor} --model ${init_model} --off-da
     done
 done
