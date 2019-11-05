@@ -43,7 +43,7 @@ def get_args(description='VQ-VAE', return_parser=False, inputs=None):
     parser.add_argument('--config', type=str, default=None,
         help='config file path')
 
-    parser.add_argument('--off-da', dest='data_augument', action='store_true',
+    parser.add_argument('--off-da', dest='data_augument', action='store_false',
         help='disable data augumentation')
 
     if 'Performance' in description:

@@ -14,7 +14,7 @@ dataset='fashion-mnist'
 
 
 # ls ${init_model[0]}
-for ((j=1; j < 2; j++))
+for ((j=1; j < 3; j++))
 do
     i=1
     output_dir[$i]=$dataset'_im64_gap_k'${k[$j]}'_e100_no_recon'
