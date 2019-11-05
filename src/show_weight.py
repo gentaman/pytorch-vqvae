@@ -67,50 +67,75 @@ def reconstruct_sample(model, images, labels, predictor, out_dir, prefix=None, m
         plt.close()
 
 
-def plot_codebooks(model, fmap_size, out_dir, device='cuda', each_normalize=True):
+def plot_codebooks(model, fmap_size, out_dir, device='cuda', each_normalize=True, on_fmap=None):
     make_dir(out_dir)
     em_weight = model.codebook.embedding.weight.cpu().detach().numpy()
     k, hidden_size = em_weight.shape
     vmin = np.inf
     vmax = -np.inf
     outs = []
-    for j in range((fmap_size)**2):
+
+    if on_fmap is None:
+        for j in range((fmap_size)**2):
+            d = torch.zeros(k, hidden_size, fmap_size, fmap_size)
+            h_index, w_index = np.unravel_index(j, (fmap_size, fmap_size))
+            d[:, :, h_index, w_index] = torch.Tensor(em_weight)
+            out = model.decoder(d.to(device))
+            outs.append(out.cpu())
+            if not each_normalize:
+                if vmin > out1.min():
+                    vmin = out1.min()
+                if vmax < out1.max():
+                    vmax = out1.max()
+        for i in range(k):
+            plt.figure(figsize=(16, 16))
+            for j in range((fmap_size)**2):
+                # d = torch.zeros(k, hidden_size, fmap_size, fmap_size)
+                # h_index, w_index = np.unravel_index(j, (fmap_size, fmap_size))
+                # d[:, :, h_index, w_index] = torch.Tensor(em_weight)
+                # out1 = model.decoder(d.to(device))
+                plt.subplot(fmap_size, fmap_size, j+1)
+                plt.title('index: {}-{}'.format(h_index, w_index))
+                if each_normalize:
+                    plt.imshow(outs[j][i, 0].cpu().detach().numpy())
+                else:
+                    plt.imshow(outs[j][i, 0].cpu().detach().numpy(), vmin=vmin, vmax=vmax)
+                plt.axis('off')
+            plt.tight_layout()
+            out_path = os.path.join(out_dir, '{}-{}-{}.png'.format(str(i).zfill(3), h_index, w_index))
+            plt.savefig(out_path)
+            plt.close()
+    else:
+        if isinstance(on_fmap, int):
+            j = on_fmap
+            h_index, w_index = np.unravel_index(j, (fmap_size, fmap_size))
+        elif len(on_fmap) == 2:
+            h_index, w_index = on_fmap
         d = torch.zeros(k, hidden_size, fmap_size, fmap_size)
-        h_index, w_index = np.unravel_index(j, (fmap_size, fmap_size))
         d[:, :, h_index, w_index] = torch.Tensor(em_weight)
         out = model.decoder(d.to(device))
-        outs.append(out.cpu())
-        if not each_normalize:
-            if vmin > out1.min():
-                vmin = out1.min()
-            if vmax < out1.max():
-                vmax = out1.max()
-
-    for i in range(k):
-        plt.figure(figsize=(16, 16))
-        for j in range((fmap_size)**2):
-            # d = torch.zeros(k, hidden_size, fmap_size, fmap_size)
-            # h_index, w_index = np.unravel_index(j, (fmap_size, fmap_size))
-            # d[:, :, h_index, w_index] = torch.Tensor(em_weight)
-            # out1 = model.decoder(d.to(device))
-            plt.subplot(fmap_size, fmap_size, j+1)
+        vmin = out.min()
+        vmax = out.max()
+        for i in range(k):
+            plt.figure(figsize=(4, 4))
             plt.title('index: {}-{}'.format(h_index, w_index))
             if each_normalize:
-                plt.imshow(outs[j][i, 0].cpu().detach().numpy())
+                plt.imshow(out[i, 0].cpu().detach().numpy())
             else:
-                plt.imshow(outs[j][i, 0].cpu().detach().numpy(), vmin=vmin, vmax=vmax)
+                plt.imshow(out[i, 0].cpu().detach().numpy(), vmin=vmin, vmax=vmax)
             plt.axis('off')
-        plt.tight_layout()
-        out_path = os.path.join(out_dir, '{}-{}-{}.png'.format(str(i).zfill(3), h_index, w_index))
-        plt.savefig(out_path)
-        plt.close()
+            plt.tight_layout()
+            out_path = os.path.join(out_dir, '{}-{}-{}.png'.format(str(i).zfill(3), h_index, w_index))
+            plt.savefig(out_path)
+            plt.close()
+
 
 def plot_perform_model(args, num_channels, n_out, data_loader, model_path, predictor_path=None):
 
     root = args.root
     dirname = os.path.dirname(model_path)
     dirname = os.path.basename(dirname)
-    path = os.path.join(root, args.output_folder, dirname)
+    path = os.path.join(root, 'perform', dirname)
 
 
     model = VectorQuantizedVAE(
@@ -158,30 +183,38 @@ def plot_perform_model(args, num_channels, n_out, data_loader, model_path, predi
         out_dir = os.path.join(path, 'gen_codebook')
     else:
         out_dir = os.path.join(path, 'gen_codebook_norm')
-    plot_codebooks(model, args.image_size//8, out_dir, device=args.device, each_normalize=args.each_normalize)
+    if args.project_center:
+        on_fmap = (args.image_size//4//2, args.image_size//4//2)
+    else:
+        on_fmap = None
+    plot_codebooks(model, args.image_size//4, out_dir, device=args.device, each_normalize=args.each_normalize, on_fmap=on_fmap)
 
 
-def main(args):
-    result = get_dataset(args.dataset, args.data_folder, image_size=args.image_size)
-
-    train_dataset = result['train']
-    test_dataset = result['test']
-    valid_dataset = result['valid']
-    num_channels = result['num_channels']
-
-    # Define the data loaders
-    train_loader = torch.utils.data.DataLoader(train_dataset,
-        batch_size=args.batch_size, shuffle=False,
-        num_workers=args.num_workers, pin_memory=True)
-    valid_loader = torch.utils.data.DataLoader(valid_dataset,
-        batch_size=args.batch_size, shuffle=False, drop_last=True,
-        num_workers=args.num_workers, pin_memory=True)
-    test_loader = torch.utils.data.DataLoader(test_dataset,
-        batch_size=args.batch_size, shuffle=False)
+def main(main_args):
     
-    n_out = len(train_dataset._label_encoder)
-    for model_path in glob(os.path.join(args.root, 'models', '*', 'best.pt')):
+    for model_path in glob(os.path.join(main_args.root, 'models', '*', 'best.pt')):
         dirname = os.path.dirname(model_path)
+        base_name = os.path.basename(dirname)
+        config_path = os.path.join(main_args.root, 'configs', base_name, 'config')
+        args = get_args(description='Performance', inputs=['--config', config_path])
+
+        result = get_dataset(args.dataset, args.data_folder, image_size=args.image_size)
+        train_dataset = result['train']
+        test_dataset = result['test']
+        valid_dataset = result['valid']
+        num_channels = result['num_channels']
+
+        # Define the data loaders
+        train_loader = torch.utils.data.DataLoader(train_dataset,
+            batch_size=args.batch_size, shuffle=False,
+            num_workers=args.num_workers, pin_memory=True)
+        valid_loader = torch.utils.data.DataLoader(valid_dataset,
+            batch_size=args.batch_size, shuffle=False, drop_last=True,
+            num_workers=args.num_workers, pin_memory=True)
+        test_loader = torch.utils.data.DataLoader(test_dataset,
+            batch_size=args.batch_size, shuffle=False)
+        n_out = len(train_dataset._label_encoder)
+    
         pred_path = os.path.join(dirname, 'best_predictor.pt')
         print('model performance: {}'.format(model_path))
         if not os.path.exists(pred_path):
@@ -195,31 +228,14 @@ if __name__ == '__main__':
     import os
     import sys
 
-    args = get_args(description='Performance VQ-VAE')
-    
-    # Create logs and models folder if they don't exist
-    root = args.root
-    log_path = os.path.join(root, 'logs')
-    if not os.path.exists(log_path):
-        os.makedirs(log_path)
-    models_path = os.path.join(root, 'models')
-    if not os.path.exists(models_path):
-        os.makedirs(models_path)
-    path = os.path.join(root, 'configs', args.output_folder)
-    if not os.path.exists(path):
-        os.makedirs(path)
-    with open(os.path.join(path, 'config'), 'w') as f:
-        f.write('\n'.join(sys.argv))
-    
-    # Device
-    args.device = torch.device(args.device
-        if torch.cuda.is_available() else 'cpu')
-    # Slurm
-    if 'SLURM_JOB_ID' in os.environ:
-        args.output_folder += '-{0}'.format(os.environ['SLURM_JOB_ID'])
-    path = os.path.join(models_path, args.output_folder)
-    if not os.path.exists(path):
-        os.makedirs(path)
-    args.steps = 0
-
+    import argparse
+    parser = argparse.ArgumentParser(description='Performance')
+    parser.add_argument('--root', type=str, default='.', required=True,
+            help='name of the root of the output folder (default: .)')
+    # Visualization
+    parser.add_argument('--off-eachnorm', dest='each_normalize', action='store_false',
+        help='disable noramalization of visualizing image')
+    parser.add_argument('--plot-center', dest='project_center', action='store_true',
+        help='visualizing codebook with one-hot center future map')
+    args = parser.parse_args()
     main(args)

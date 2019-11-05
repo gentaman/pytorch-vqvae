@@ -37,7 +37,7 @@ def update(actions, config, argv):
 
 
 
-def get_args(description='VQ-VAE', return_parser=False):
+def get_args(description='VQ-VAE', return_parser=False, inputs=None):
     parser = argparse.ArgumentParser(description=description)
 
     parser.add_argument('--config', type=str, default=None,
@@ -100,6 +100,8 @@ def get_args(description='VQ-VAE', return_parser=False):
         # Visualization
         parser.add_argument('--off-eachnorm', dest='each_normalize', action='store_false',
             help='disable noramalization of visualizing image')
+        parser.add_argument('--plot-center', dest='project_center', action='store_true',
+            help='visualizing codebook with one-hot center future map')
 
     elif 'VQ-VAE with prediction' in description:
         # General
@@ -213,7 +215,10 @@ def get_args(description='VQ-VAE', return_parser=False):
     if return_parser:
         return parser
     
-    args = parser.parse_args()
+    if inputs is None:
+        args = parser.parse_args()
+    else:
+        args = parser.parse_args(inputs)
     
     if args.config is None:
         return args
