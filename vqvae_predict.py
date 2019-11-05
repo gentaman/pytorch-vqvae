@@ -188,69 +188,11 @@ def main(args):
                 torch.save(predictor.state_dict(), f)
         
 if __name__ == '__main__':
-    import argparse
+    from utils import get_args
     import os
-    import multiprocessing as mp
     import sys
 
-    parser = argparse.ArgumentParser(description='VQ-VAE with prediction')
-
-    # General
-    parser.add_argument('--data-folder', type=str,
-        help='name of the data folder')
-    parser.add_argument('--dataset', type=str,
-        help='name of the dataset (mnist, fashion-mnist, cifar10, miniimagenet)')
-    parser.add_argument('--image-size', type=int, default=128,
-        help='size of the input image (default: 128)')
-    parser.add_argument('--model', type=str, default='',
-        help='filename containing the model')
-    parser.add_argument('--predictor', type=str, default='',
-        help='filename containing the predictor')
-    parser.add_argument('--gap', action='store_true',
-        help='add GAP')
-    parser.add_argument('--off-bn', dest='BN', action='store_false',
-        help='disable Batch Noramalization')
-    parser.add_argument('--off-bias', dest='bias', action='store_false',
-        help='disable Batch Noramalization')
-    parser.add_argument('--resblock-transpose', action='store_true',
-        help='apply conv transpose to ResBlock')
-
-    # Latent space
-    parser.add_argument('--hidden-size', type=int, default=256,
-        help='size of the latent vectors (default: 256)')
-    parser.add_argument('--k', type=int, default=512,
-        help='number of latent vectors (default: 512)')
-
-    parser.add_argument('--hidden-fmap-size', type=int, default=None,
-        help='size of the latent vectors (default: None)')
-
-    # Optimization
-    parser.add_argument('--batch-size', type=int, default=128,
-        help='batch size (default: 128)')
-    parser.add_argument('--num-epochs', type=int, default=100,
-        help='number of epochs (default: 100)')
-    parser.add_argument('--lr', type=float, default=2e-4,
-        help='learning rate for Adam optimizer (default: 2e-4)')
-    parser.add_argument('--beta', type=float, default=1.0,
-        help='contribution of commitment loss, between 0.1 and 2.0 (default: 1.0)')
-    parser.add_argument('--gamma', type=float, default=1.0,
-        help='contribution of prediction loss, between 0.1 and 2.0 (default: 1.0)')
-    parser.add_argument('--recon_coeff', type=float, default=1.0,
-        help='contribution of reconstruction loss, between 0.1 and 2.0 (default: 1.0)')
-    parser.add_argument('--vq_coeff', type=float, default=1.0,
-        help='contribution of vector quantization loss, between 0.1 and 2.0 (default: 1.0)')
-
-    # Miscellaneous
-    parser.add_argument('--root', type=str, default='.',
-        help='name of the root of the output folder (default: .)')
-    parser.add_argument('--output-folder', type=str, default='vqvae',
-        help='name of the output folder (default: vqvae)')
-    parser.add_argument('--num-workers', type=int, default=mp.cpu_count() - 1,
-        help='number of workers for trajectories sampling (default: {0})'.format(mp.cpu_count() - 1))
-    parser.add_argument('--device', type=str, default='cpu',
-        help='set the device (cpu or cuda, default: cpu)')
-
-    args = parser.parse_args()
+    args = get_args(description='VQ-VAE with prediction')
 
     # Create logs and models folder if they don't exist
     root = args.root

@@ -8,7 +8,13 @@ import matplotlib.pyplot as plt
 
 def get_plotargs(name, train_vs_test=False):
     label_name = ''
-    if 'k128' in name:
+    if 'k256' in name:
+        label_name = label_name + 'k128'
+        c1 = 224
+        c2 = 224
+        c3 = 80
+        vq = True
+    elif 'k128' in name:
         label_name = label_name + 'k128'
         c1 = 224
         c2 = 80
@@ -44,38 +50,37 @@ def get_plotargs(name, train_vs_test=False):
         else:
             label_name = ' '.join(['CNN', label_name])
         ls = '--'
-        r = c1
-        g = c2
-        b = c3
-#         r = 0
-#         g = c1
-#         b = c2
-        color = '#{:02x}{:02x}{:02x}'.format(r, g, b)
     elif 'no_pred' in name:
         if vq:
             label_name = ' '.join(['VQ-VAE', label_name])
         else:
             label_name = ' '.join(['AE', label_name])
         ls = ':'
-        r = c1
-        g = c2
-        b = c3
-#         r = c2
-#         g = 0
-#         b = c1
-        color = '#{:02x}{:02x}{:02x}'.format(r, g, b)
     else:
         if vq:
             label_name = ' '.join(['multi-VQ-VAE', label_name])
         else:
             label_name = ' '.join(['multi-AE', label_name])
         ls = '-'
+
+    if 'fashion-mnist' in name:
+        r = c3
+        g = c1
+        b = c2
+        color = '#{:02x}{:02x}{:02x}'.format(r, g, b)
+        label_name = ' '.join([label_name, 'fashion-MNIST'])
+    elif 'mnist' in name:
         r = c1
         g = c2
         b = c3
         color = '#{:02x}{:02x}{:02x}'.format(r, g, b)
+        label_name = ' '.join([label_name, 'MNIST'])
+    else:
+        r = c1
+        g = c2
+        b = 0
+        color = '#{:02x}{:02x}{:02x}'.format(r, g, b)
     
-
     
     args = {
         'linestyle': ls,
