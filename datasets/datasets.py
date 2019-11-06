@@ -39,6 +39,7 @@ def get_dataset(dataset, data_folder, image_size=None, DA=True):
                     transforms.Normalize(mean=[0.5], std=[0.5])
                 ])
             else:
+                transforms.Resize((image_size, image_size)),
                 transform = transforms.Compose([
                     transforms.ToTensor(),
                     transforms.Normalize(mean=[0.5], std=[0.5])
@@ -69,6 +70,7 @@ def get_dataset(dataset, data_folder, image_size=None, DA=True):
                 ])
             else:
                 transform = transforms.Compose([
+                    transforms.Resize((image_size, image_size)),
                     transforms.ToTensor(),
                     transforms.Normalize(mean=[0.5], std=[0.5])
                 ])
