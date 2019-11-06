@@ -8,22 +8,36 @@ import cv2
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
 
-# root_path = '/home/genta/data2/20191023_transpose_vqvae/logs/'
-# out_dir = './out'
 
-def main(root_path, out_dir):
-    if not os.path.exists(out_dir):
-        os.makedirs(out_dir)
+def main(root_path, arg_out_dir=None, output_scalar='scalars_data'):
+    if arg_out_dir is not None:
+        # eg. root_path: '/{some directory}/logs/'
+        # eg. out_dir: '/{some directory}/datas/'
+        fnames = os.listdir(root_path)
+        paths = map(lambda fname: [root_path, arg_out_dir, fname], fnames)
+        if not os.path.exists(arg_out_dir):
+            os.makedirs(arg_out_dir)
+    else:
+        # eg. root_path: '/{some directory}/logs/{model name}*'
+        root_paths = map(lambda x: os.path.dirname(x), glob(root_path))
+        fnames = map(lambda x: os.path.basename(x), glob(root_path))
+        out_dirs = map(lambda x: 
+                    os.path.join(os.path.dirname(os.path.dirname(x)), 'datas'),
+                    glob(root_path))
+        paths = zip(root_paths, out_dirs, fnames)
 
+
+    # Not change coeffs
     recon_coeff = 1.0
     vq_coeff = 1.0
     beta = 1.0
     gamma = 1.0
-    
 
 
     datas = {}
-    for fname in os.listdir(root_path):
+    for root_path, out_dir, fname in paths:
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
         path = os.path.join(root_path, fname)
         event_path = glob(os.path.join(path, 'events*'))[0]
         print('load ==> {}'.format(event_path))
@@ -81,20 +95,50 @@ def main(root_path, out_dir):
                 outpath = os.path.join(out_dir_fname, out_name)
                 print('write image ==> {}'.format(outpath))
                 cv2.imwrite(outpath, image)
+        if arg_out_dir is None:
+            pkl_path = os.path.join(out_dir, '{}.pkl'.format(output_scalar))
+            with open(pkl_path, 'wb') as f:
+                pickle.dump(datas, f)
+            datas = {}
 
-    pkl_path = os.path.join(out_dir, 'scalars_data.pkl')
-    with open(pkl_path, 'wb') as f:
-        pickle.dump(datas, f)
+    if arg_out_dir is not None:
+        pkl_path = os.path.join(out_dir, '{}.pkl'.format(output_scalar))
+        with open(pkl_path, 'wb') as f:
+            pickle.dump(datas, f)
 
 if __name__ == '__main__':
     import sys
+    import argparse
+    description = 'extract data'
+    parser = argparse.ArgumentParser(description=description)
 
-    root_path = sys.argv[1]
-    if len(sys.argv) <= 2:
-        dirname = os.path.dirname(root_path.rstrip('/'))
+    parser.add_argument('-g', '--glob', type=str, default=None,
+        help='glob path')
+    parser.add_argument('-r', '--log-root', type=str, default=None,
+        help='log directory path')
+    parser.add_argument('-o', '--output-scalar', type=str, default='scalars_data',
+        help='output name of scalar data')
+
+    args = parser.parse_args()
+
+    if args.glob is None and args.log_root is None:
+        raise ValueError
+
+    # root_path = sys.argv[1]
+    # if len(sys.argv) <= 2:
+    #     dirname = os.path.dirname(root_path.rstrip('/'))
+    #     out_dir = os.path.join(dirname, 'datas')
+    # else:
+    #     out_dir = sys.argv[2]
+
+    if args.glob is None:
+        root_path = args.log_root
+        dirname = os.path.dirname(args.log_root.rstrip('/'))
         out_dir = os.path.join(dirname, 'datas')
+        main(root_path, out_dir, output_scalar=args.output_scalar)
+    elif args.log_root is None:
+        main(os.path.expanduser(args.glob), output_scalar=args.output_scalar)
     else:
-        out_dir = sys.argv[2]
-
-    main(root_path, out_dir)
+        raise ValueError
+    
 
