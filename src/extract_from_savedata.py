@@ -96,7 +96,7 @@ def main(root_path, arg_out_dir=None, output_scalar='scalars_data'):
                 print('write image ==> {}'.format(outpath))
                 cv2.imwrite(outpath, image)
         if arg_out_dir is None:
-            pkl_path = os.path.join(out_dir, '{}.pkl'.format(output_scalar))
+            pkl_path = os.path.join(out_dir_fname, '{}.pkl'.format(output_scalar))
             with open(pkl_path, 'wb') as f:
                 pickle.dump(datas, f)
             datas = {}
