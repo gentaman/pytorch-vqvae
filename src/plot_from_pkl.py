@@ -2,12 +2,27 @@ import pickle
 import os
 from glob import glob
 import re
+import random
 
 import matplotlib.pyplot as plt
+
+def parse_ksize(name):
+    s_key = '_k'
+    e_key = '_'
+    s_index = name.find(s_key)
+    if s_index == -1:
+        return -1
+    sep_name = name[s_index+len('_k'):]
+    e_index = sep_name.find(e_key)
+    if e_index == -1:
+        return -1
+    
+    return int(name[s_index + len('_k') :s_index + len('_k') +  e_index])
 
 
 def get_plotargs(name, train_vs_test=False):
     label_name = ''
+    ksize = parse_ksize(name)
     if 'k256' in name:
         label_name = label_name + 'k128'
         c1 = 224
@@ -36,6 +51,13 @@ def get_plotargs(name, train_vs_test=False):
             c1 = 80
             c2 = 80
             c3 = 224
+        vq = True
+    elif ksize > -1:
+        label_name = label_name + 'k' + str(ksize)
+        random.seed(ksize)
+        c1 = random.randrange(0, 255, 20)
+        c2 = random.randrange(0, 255, 20)
+        c3 = random.randrange(0, 255, 20)
         vq = True
 
     else:
@@ -274,6 +296,7 @@ if __name__ == '__main__':
         dir_path = os.path.dirname(dirname)
 
         args.output_folder = os.path.join(dir_path, 'imgs')
-        
+    
+    print(args.output_folder)
     main(args.scalars, args.output_folder, 
         adjust_y_scale=args.adjust_y_scale)
