@@ -51,7 +51,7 @@ class AE(nn.Module):
             nn.BatchNorm2d(dim),
             nn.ReLU(True),
             nn.ConvTranspose2d(dim, input_dim, 4, 2, 1),
-            nn.Tanh()        ]
+            nn.Tanh()]
         if not BN:
             connections = list(filter(lambda x: not isinstance(x, nn.BatchNorm2d), connections))
         self.decoder = nn.Sequential(*connections)
@@ -91,7 +91,7 @@ class VAE(nn.Module):
             nn.BatchNorm2d(dim),
             nn.ReLU(True),
             nn.ConvTranspose2d(dim, input_dim, 4, 2, 1),
-            nn.Tanh()        ]
+            nn.Tanh()]
         if not BN:
             connections = list(filter(lambda x: not isinstance(x, nn.BatchNorm2d), connections))
         self.decoder = nn.Sequential(*connections)
@@ -121,10 +121,15 @@ class VAE(nn.Module):
 
 
 class VQEmbedding(nn.Module):
-    def __init__(self, K, D):
+    def __init__(self, K, D, ema=False, gamma=0.99):
         super().__init__()
         self.embedding = nn.Embedding(K, D)
-        self.embedding.weight.data.uniform_(-1./K, 1./K)
+        self.embedding.weight.data.uniform_(-1. / K, 1. / K)
+        self.ema = ema
+        self.N = 0.0
+        self.M = 0.0
+        self.gamma = gamma
+        self.index = None
 
     def forward(self, z_e_x):
         z_e_x_ = z_e_x.permute(0, 2, 3, 1).contiguous()
@@ -136,12 +141,27 @@ class VQEmbedding(nn.Module):
         z_q_x_, indices = vq_st(z_e_x_, self.embedding.weight.detach())
         z_q_x = z_q_x_.permute(0, 3, 1, 2).contiguous()
 
+        self.index = indices
+
         z_q_x_bar_flatten = torch.index_select(self.embedding.weight,
             dim=0, index=indices)
         z_q_x_bar_ = z_q_x_bar_flatten.view_as(z_e_x_)
         z_q_x_bar = z_q_x_bar_.permute(0, 3, 1, 2).contiguous()
 
         return z_q_x, z_q_x_bar
+
+    def update(self, n, z_e_x):
+        if self.ema:
+            batch, _, h, w = z_e_x.shape
+            K = self.embedding.weight.shape[0]
+            onehots = torch.zeros(K, int(batch * h * w))
+            onehots.scatter_(1, self.index, 1)
+            sum_z = torch.mm(z_e_x, onehot.transpose(0, 1))
+            self.N = self.N * self.gamma + n * (1 - self.gamma)
+            self.M = self.M * self.gamma + sum_z * (1 - self.gamma)
+            self.embedding.weight.data = self.M / self.N
+        else:
+            raise ValueError('ema is False')
 
 
 class ResBlock(nn.Module):
@@ -172,7 +192,7 @@ class ResBlock(nn.Module):
         self.block = nn.Sequential(*connections)
 
     def forward(self, x):
-        h = x 
+        h = x
         cnt = 0
         for b in self.block:
             if self.transpose and isinstance(b, nn.ConvTranspose2d):
@@ -187,11 +207,11 @@ class ResBlock(nn.Module):
 
 
 class VectorQuantizedVAE(nn.Module):
-    def __init__(self, input_dim, dim, K=512, pred=False, transpose=False, BN=True, bias=True):
+    def __init__(self, input_dim, dim, K=512, pred=False, transpose=False, BN=True, bias=True, ema=False):
         super().__init__()
         self.pred = pred
 
-        self.codebook = VQEmbedding(K, dim)
+        self.codebook = VQEmbedding(K, dim, ema)
 
         connections = [
             nn.Conv2d(input_dim, dim, 4, 2, 1, bias=bias),
@@ -213,7 +233,7 @@ class VectorQuantizedVAE(nn.Module):
             nn.BatchNorm2d(dim),
             nn.ReLU(True),
             nn.ConvTranspose2d(dim, input_dim, 4, 2, 1, bias=bias),
-            nn.Tanh()        ]
+            nn.Tanh()]
         if not BN:
             connections = list(filter(lambda x: not isinstance(x, nn.BatchNorm2d), connections))
         self.decoder = nn.Sequential(*connections)

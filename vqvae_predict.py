@@ -17,7 +17,7 @@ from tensorboardX import SummaryWriter
 
 def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None):
     for images, labels in tqdm(data_loader, total=len(data_loader)):
-        # print(images.shape) 
+        # print(images.shape)
         images = images.to(args.device)
         labels = labels.to(args.device)
 
@@ -28,7 +28,10 @@ def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None):
         # Reconstruction loss
         loss_recons = F.mse_loss(x_tilde, images)
         # Vector quantization objective
-        loss_vq = F.mse_loss(z_q_x, z_e_x.detach())
+        if not args.ema:
+            loss_vq = F.mse_loss(z_q_x, z_e_x.detach())
+        else:
+            loss_vq = 0.0
         # Commitment objective
         loss_commit = F.mse_loss(z_e_x, z_q_x.detach())
 
@@ -39,6 +42,9 @@ def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None):
 
         loss = args.recon_coeff * loss_recons + args.vq_coeff * loss_vq + args.beta * loss_commit + args.gamma * loss_pred
         loss.backward()
+
+        if args.ema:
+            model.codebook.update(len(z_e_x), torch.sum(z_e_x, dim=))
 
         if writer is not None:
             # Logs
@@ -71,7 +77,7 @@ def test(data_loader, model, clfy, args, writer=None, loss_fn=None):
         loss_vq /= len(data_loader)
         loss_pred /= len(data_loader)
         acc_total /= len(data_loader)
-    
+
     if writer is not None:
         # Logs
         writer.add_scalar('loss/test/reconstruction', loss_recons.item(), args.steps)
@@ -98,7 +104,7 @@ def main(args):
     path = os.path.join(root, 'logs', args.output_folder)
     writer = SummaryWriter(path)
     save_filename = os.path.join(root, 'models', args.output_folder)
-    
+
     result = get_dataset(args.dataset, args.data_folder, image_size=args.image_size, DA=args.data_augument)
 
     train_dataset = result['train']
@@ -122,7 +128,7 @@ def main(args):
     writer.add_image('original', fixed_grid, 0)
 
     model = VectorQuantizedVAE(
-        num_channels, args.hidden_size, args.k, pred=True, transpose=args.resblock_transpose, BN=args.BN, bias=args.bias
+        num_channels, args.hidden_size, args.k, pred=True, transpose=args.resblock_transpose, BN=args.BN, bias=args.bias, ema=args.ema,
         ).to(args.device)
 
     if args.hidden_fmap_size is None:
@@ -164,7 +170,7 @@ def main(args):
         torch.save(model.state_dict(), f)
     with open(os.path.join(save_filename, 'init.predictor.pt'), 'wb') as f:
         torch.save(predictor.state_dict(), f)
-    
+
     best_loss = -1.
     for epoch in tqdm(range(args.num_epochs), total=args.num_epochs):
         train(train_loader, model, predictor, optimizer, args, writer, predictor.loss)
@@ -186,7 +192,7 @@ def main(args):
         if args.gap:
             with open('{0}/predictor_{1}.pt'.format(save_filename, epoch + 1), 'wb') as f:
                 torch.save(predictor.state_dict(), f)
-        
+
 if __name__ == '__main__':
     from utils import get_args
     import os
@@ -207,7 +213,7 @@ if __name__ == '__main__':
         os.makedirs(path)
     with open(os.path.join(path, 'config'), 'w') as f:
         f.write('\n'.join(sys.argv))
-    
+
     # Device
     args.device = torch.device(args.device
         if torch.cuda.is_available() else 'cpu')
@@ -220,4 +226,3 @@ if __name__ == '__main__':
     args.steps = 0
 
     main(args)
-

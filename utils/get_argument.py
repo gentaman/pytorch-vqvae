@@ -9,7 +9,7 @@ def parse_config(config_path):
         # remove python script name
         # result = ' '.join(data[1:])
         result = data[1:]
-        
+
     return result
 
 def update(actions, config, argv):
@@ -22,10 +22,10 @@ def update(actions, config, argv):
                 if len(c_find) > 0:
                     c_index = config.index(c_find[0])
                     config[c_index] = argv[a_index]
-                    config[c_index+1] = argv[a_index+1]
+                    config[c_index + 1] = argv[a_index + 1]
                 else:
                     config.append(argv[a_index])
-                    config.append(argv[a_index+1])
+                    config.append(argv[a_index + 1])
 
             elif isinstance(act, argparse._StoreFalseAction) or isinstance(act, argparse._StoreTrueAction):
                 if len(c_find) > 0:
@@ -33,9 +33,6 @@ def update(actions, config, argv):
                 else:
                     config.append(argv[a_index])
     return config
-                
-
-
 
 def get_args(description='VQ-VAE', return_parser=False, inputs=None):
     parser = argparse.ArgumentParser(description=description)
@@ -45,6 +42,8 @@ def get_args(description='VQ-VAE', return_parser=False, inputs=None):
 
     parser.add_argument('--off-da', dest='data_augument', action='store_false',
         help='disable data augumentation')
+    parser.add_argument('--ema', dest='ema', action='store_true',
+        help='enable Exponential Moving Average')
 
     if 'Performance' in description:
         # General
@@ -106,7 +105,7 @@ def get_args(description='VQ-VAE', return_parser=False, inputs=None):
         parser.add_argument('--plot-center', dest='project_center', action='store_true',
             help='visualizing codebook with one-hot center future map')
 
-    elif 'VQ-VAE with prediction' in description:
+    elif 'VQ-VAE with prediction' in description or 'VQ-VAE' in description:
         # General
         parser.add_argument('--data-folder', type=str,
             help='name of the data folder')
@@ -162,7 +161,7 @@ def get_args(description='VQ-VAE', return_parser=False, inputs=None):
         parser.add_argument('--device', type=str, default='cpu',
             help='set the device (cpu or cuda, default: cpu)')
 
-    elif 'AE with prediction' in description:
+    elif 'AE with prediction' in description or 'AE' in description:
         # General
         parser.add_argument('--data-folder', type=str,
             help='name of the data folder')
@@ -178,7 +177,6 @@ def get_args(description='VQ-VAE', return_parser=False, inputs=None):
             help='add GAP')
         parser.add_argument('--resblock-transpose', action='store_true',
             help='apply conv transpose to ResBlock')
-
 
         # Latent space
         parser.add_argument('--hidden-size', type=int, default=256,
@@ -204,7 +202,6 @@ def get_args(description='VQ-VAE', return_parser=False, inputs=None):
         parser.add_argument('--recon_coeff', type=float, default=1.0,
             help='contribution of reconstruction loss, between 0.1 and 2.0 (default: 1.0)')
 
-
         # Miscellaneous
         parser.add_argument('--root', type=str, default='.',
             help='name of the root of the output folder (default: .)')
@@ -217,12 +214,12 @@ def get_args(description='VQ-VAE', return_parser=False, inputs=None):
 
     if return_parser:
         return parser
-    
+
     if inputs is None:
         args = parser.parse_args()
     else:
         args = parser.parse_args(inputs)
-    
+
     if args.config is None:
         return args
     else:
