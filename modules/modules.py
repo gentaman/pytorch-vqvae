@@ -150,16 +150,18 @@ class VQEmbedding(nn.Module):
 
         return z_q_x, z_q_x_bar
 
-    def update(self, n, z_e_x):
+    def update(self, n, z_e_x, device='cpu'):
         if self.ema:
-            batch, _, h, w = z_e_x.shape
-            K = self.embedding.weight.shape[0]
-            onehots = torch.zeros(K, int(batch * h * w))
-            onehots.scatter_(1, self.index, 1)
-            sum_z = torch.mm(z_e_x, onehot.transpose(0, 1))
-            self.N = self.N * self.gamma + n * (1 - self.gamma)
-            self.M = self.M * self.gamma + sum_z * (1 - self.gamma)
-            self.embedding.weight.data = self.M / self.N
+            with torch.no_grad():
+                batch, ch, h, w = z_e_x.shape
+                z_e = z_e_x.permute(0, 2, 3, 1).contiguous().view(-1, ch)
+                K = self.embedding.weight.shape[0]
+                onehots = torch.zeros(int(batch * h * w), K, device=device)
+                onehots.scatter_(1, self.index.unsqueeze(1), 1)
+                sum_z = torch.mm(z_e.transpose(1, 0), onehots)
+                self.N = self.N * self.gamma + n * (1 - self.gamma)
+                self.M = self.M * self.gamma + sum_z * (1 - self.gamma)
+                self.embedding.weight.data = (self.M / self.N).transpose(1, 0)
         else:
             raise ValueError('ema is False')
 

@@ -31,7 +31,7 @@ def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None):
         if not args.ema:
             loss_vq = F.mse_loss(z_q_x, z_e_x.detach())
         else:
-            loss_vq = 0.0
+            loss_vq = torch.zeros(1, device=args.device)
         # Commitment objective
         loss_commit = F.mse_loss(z_e_x, z_q_x.detach())
 
@@ -44,7 +44,7 @@ def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None):
         loss.backward()
 
         if args.ema:
-            model.codebook.update(len(z_e_x), torch.sum(z_e_x, dim=))
+            model.codebook.update(len(z_e_x), z_e_x, device=args.device)
 
         if writer is not None:
             # Logs
