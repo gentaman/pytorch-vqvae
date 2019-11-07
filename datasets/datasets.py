@@ -47,6 +47,7 @@ def get_dataset(dataset, data_folder, image_size=None, DA=True):
             train_dataset = datasets.MNIST(data_folder, train=True,
                 download=True, transform=transform)
             transform = transforms.Compose([
+                transforms.Resize((image_size, image_size)),
                 transforms.ToTensor(),
                 transforms.Normalize(mean=[0.5], std=[0.5])
             ])
