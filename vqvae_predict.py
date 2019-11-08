@@ -3,6 +3,8 @@ import torch
 import torch.nn.functional as F
 from torchvision import transforms, datasets
 from torchvision.utils import save_image, make_grid
+from torch.utils.data.sampler import SubsetRandomSampler
+from torch.utils.data.sampler import SequentialSampler
 from tqdm import tqdm
 
 from modules.modules import VectorQuantizedVAE, to_scalar
@@ -11,11 +13,12 @@ from modules.functions import Classifier
 from utils import accuracy
 from utils import copy_model
 from datasets.datasets import MiniImagenet, get_dataset
+from datasets.cross_validation import kfold_cv, get_splited_dataloader
 
 from tensorboardX import SummaryWriter
 
 
-def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None):
+def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None, tag=None):
     for images, labels in tqdm(data_loader, total=len(data_loader)):
         # print(images.shape)
         images = images.to(args.device)
@@ -48,15 +51,21 @@ def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None):
 
         if writer is not None:
             # Logs
-            writer.add_scalar('loss/train/reconstruction', loss_recons.item(), args.steps)
-            writer.add_scalar('loss/train/quantization', loss_vq.item(), args.steps)
-            writer.add_scalar('loss/train/prediction', loss_pred.item(), args.steps)
-            writer.add_scalar('accuracy/train', acc.item(), args.steps)
+            if tag is None:
+                writer.add_scalar('loss/train/reconstruction', loss_recons.item(), args.steps)
+                writer.add_scalar('loss/train/quantization', loss_vq.item(), args.steps)
+                writer.add_scalar('loss/train/prediction', loss_pred.item(), args.steps)
+                writer.add_scalar('accuracy/train', acc.item(), args.steps)
+            else:
+                writer.add_scalar('{}/loss/train/reconstruction'.format(tag), loss_recons.item(), args.steps)
+                writer.add_scalar('{}/loss/train/quantization'.format(tag), loss_vq.item(), args.steps)
+                writer.add_scalar('{}/loss/train/prediction'.format(tag), loss_pred.item(), args.steps)
+                writer.add_scalar('{}/accuracy/train'.format(tag), acc.item(), args.steps)
 
         optimizer.step()
         args.steps += 1
 
-def test(data_loader, model, clfy, args, writer=None, loss_fn=None):
+def test(data_loader, model, clfy, args, writer=None, loss_fn=None, tag=None):
     with torch.no_grad():
         loss_recons, loss_vq = 0., 0.
         loss_pred = 0.
@@ -80,10 +89,17 @@ def test(data_loader, model, clfy, args, writer=None, loss_fn=None):
 
     if writer is not None:
         # Logs
-        writer.add_scalar('loss/test/reconstruction', loss_recons.item(), args.steps)
-        writer.add_scalar('loss/test/quantization', loss_vq.item(), args.steps)
-        writer.add_scalar('loss/test/prediction', loss_pred.item(), args.steps)
-        writer.add_scalar('accuracy/test', acc_total.item(), args.steps)
+        if tag is None:
+            writer.add_scalar('loss/test/reconstruction', loss_recons.item(), args.steps)
+            writer.add_scalar('loss/test/quantization', loss_vq.item(), args.steps)
+            writer.add_scalar('loss/test/prediction', loss_pred.item(), args.steps)
+            writer.add_scalar('accuracy/test', acc_total.item(), args.steps)
+        else:
+            writer.add_scalar('{}/loss/test/reconstruction'.format(tag), loss_recons.item(), args.steps)
+            writer.add_scalar('{}/loss/test/quantization'.format(tag), loss_vq.item(), args.steps)
+            writer.add_scalar('{}/loss/test/prediction'.format(tag), loss_pred.item(), args.steps)
+            writer.add_scalar('{}/accuracy/test'.format(tag), acc_total.item(), args.steps)
+
 
     res = {
         'recons': loss_recons.item(),
@@ -101,9 +117,8 @@ def generate_samples(images, model, args):
 
 def main(args):
     root = args.root
-    path = os.path.join(root, 'logs', args.output_folder)
-    writer = SummaryWriter(path)
-    save_filename = os.path.join(root, 'models', args.output_folder)
+    writer_path = os.path.join(root, 'logs', args.output_folder)
+    writer = SummaryWriter(writer_path)
 
     result = get_dataset(args.dataset, args.data_folder, image_size=args.image_size, DA=args.data_augument)
 
@@ -113,17 +128,37 @@ def main(args):
     num_channels = result['num_channels']
 
     # Define the data loaders
-    train_loader = torch.utils.data.DataLoader(train_dataset,
-        batch_size=args.batch_size, shuffle=False,
-        num_workers=args.num_workers, pin_memory=True)
-    valid_loader = torch.utils.data.DataLoader(valid_dataset,
-        batch_size=args.batch_size, shuffle=False, drop_last=True,
-        num_workers=args.num_workers, pin_memory=True)
+    if args.kfold > 0:
+        targets = train_dataset.targets.numpy()
+        train_data_index, test_data_index = kfold_cv(targets, kfold=args.kfold)
+        train_loaders = []
+        valid_loaders = []
+        for index1, index2 in zip(train_data_index, test_data_index):
+            train_sampler = SequentialSampler(index1)
+            test_sampler = SequentialSampler(index2)
+
+            train_loader = torch.utils.data.DataLoader(train_dataset,
+                batch_size=args.batch_size, shuffle=False, sampler=train_sampler,
+                num_workers=args.num_workers, pin_memory=True)
+            valid_loader = torch.utils.data.DataLoader(train_dataset,
+                batch_size=args.batch_size, shuffle=False, sampler=test_sampler,
+                num_workers=args.num_workers, pin_memory=True)
+            
+            train_loaders.append(train_loader)
+            valid_loaders.append(valid_loader)
+    else:
+        train_loaders = [torch.utils.data.DataLoader(train_dataset,
+            batch_size=args.batch_size, shuffle=False,
+            num_workers=args.num_workers, pin_memory=True)]
+        valid_loaders = [torch.utils.data.DataLoader(valid_dataset,
+            batch_size=args.batch_size, shuffle=False,
+            num_workers=args.num_workers, pin_memory=True)]
     test_loader = torch.utils.data.DataLoader(test_dataset,
-        batch_size=args.batch_size, shuffle=True)
+        batch_size=args.batch_size, shuffle=False)
 
     # Fixed images for Tensorboard
     fixed_images, _ = next(iter(test_loader))
+    fixed_images = fixed_images[:16]
     fixed_grid = make_grid(fixed_images, nrow=8, range=(-1, 1), normalize=True)
     writer.add_image('original', fixed_grid, 0)
 
@@ -161,37 +196,71 @@ def main(args):
         lr=args.lr
         )
 
-    # Generate the samples first once
-    reconstruction = generate_samples(fixed_images, model, args)
-    grid = make_grid(reconstruction.cpu(), nrow=8, range=(-1, 1), normalize=True)
-    writer.add_image('reconstruction', grid, 0)
+    save_filename = os.path.join(root, 'models', args.output_folder)
 
     with open(os.path.join(save_filename, 'init.model.pt'), 'wb') as f:
         torch.save(model.state_dict(), f)
     with open(os.path.join(save_filename, 'init.predictor.pt'), 'wb') as f:
         torch.save(predictor.state_dict(), f)
 
-    best_loss = -1.
-    for epoch in tqdm(range(args.num_epochs), total=args.num_epochs):
-        train(train_loader, model, predictor, optimizer, args, writer, predictor.loss)
-        losses = test(valid_loader, model, predictor, args, writer, predictor.loss)
-        loss = losses['recons']
-
+    for cnt, (train_loader, valid_loader) in enumerate(zip(train_loaders, valid_loaders)):
+        # Generate the samples first once
         reconstruction = generate_samples(fixed_images, model, args)
         grid = make_grid(reconstruction.cpu(), nrow=8, range=(-1, 1), normalize=True)
-        writer.add_image('reconstruction', grid, epoch + 1)
+        if args.kfold > 0:
+            writer.add_image('cv{:02}/reconstruction'.format(cnt), grid, 0)
+        else:
+            writer.add_image('reconstruction', grid, 0)
 
-        if (epoch == 0) or (loss < best_loss):
-            best_loss = loss
-            with open('{0}/best.pt'.format(save_filename), 'wb') as f:
+        save_filename = os.path.join(root, 'models_{}'.format(cnt), args.output_folder)
+        if not os.path.exists(save_filename):
+            os.makedirs(save_filename)
+        if args.kfold > 0:
+            print('Number of CV: {:02}'.format(cnt))
+        best_loss = -1.
+        for epoch in tqdm(range(args.num_epochs), total=args.num_epochs):
+            if args.kfold > 0:
+                train(train_loader, model, predictor, optimizer, args, writer, predictor.loss, tag='cv{:02}'.format(cnt))
+                losses = test(valid_loader, model, predictor, args, writer, predictor.loss, tag='cv{:02}'.format(cnt))
+            else:
+                train(train_loader, model, predictor, optimizer, args, writer, predictor.loss)
+                losses = test(valid_loader, model, predictor, args, writer, predictor.loss)
+
+            loss = args.recon_coeff * losses['recons'] + (args.vq_coeff + args.beta) * losses['vq'] + args.gamma * losses['pred']
+
+            reconstruction = generate_samples(fixed_images, model, args)
+            grid = make_grid(reconstruction.cpu(), nrow=8, range=(-1, 1), normalize=True)
+            if args.kfold > 0:
+                writer.add_image('cv{:02}/reconstruction'.format(cnt), grid, epoch + 1)
+            else:
+                writer.add_image('reconstruction', grid, epoch + 1)
+
+            if (epoch == 0) or (loss < best_loss):
+                best_loss = loss
+                best_path = os.path.join(save_filename, 'best.pt')
+                with open(best_path, 'wb') as f:
+                    torch.save(model.state_dict(), f)
+                best_path = os.path.join(save_filename, 'best_predictor.pt')
+                with open(best_path, 'wb') as f:
+                    torch.save(predictor.state_dict(), f)
+            model_path = os.path.join(save_filename, 'model_{}.pt'.format(epoch + 1))
+            with open(model_path, 'wb') as f:
                 torch.save(model.state_dict(), f)
-            with open('{0}/best_predictor.pt'.format(save_filename), 'wb') as f:
-                torch.save(predictor.state_dict(), f)
-        with open('{0}/model_{1}.pt'.format(save_filename, epoch + 1), 'wb') as f:
-            torch.save(model.state_dict(), f)
-        if args.gap:
-            with open('{0}/predictor_{1}.pt'.format(save_filename, epoch + 1), 'wb') as f:
-                torch.save(predictor.state_dict(), f)
+            if args.gap:
+                model_path = os.path.join(save_filename, 'predictor_{}.pt'.format(epoch + 1))
+                with open(model_path, 'wb') as f:
+                    torch.save(predictor.state_dict(), f)
+        
+        if not args.same_init:
+            continue
+        print('load initial model')
+        save_filename = os.path.join(root, 'models', args.output_folder)
+        with open(os.path.join(save_filename, 'init.model.pt'), 'rb') as f:
+            model.load_state_dict(torch.load(f))
+        print('load initial predictor')
+        with open(os.path.join(save_filename, 'init.predictor.pt'), 'rb') as f:
+            predictor.load_state_dict(torch.load(f))
+
 
 if __name__ == '__main__':
     from utils import get_args

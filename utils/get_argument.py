@@ -44,6 +44,10 @@ def get_args(description='VQ-VAE', return_parser=False, inputs=None):
         help='disable data augumentation')
     parser.add_argument('--ema', dest='ema', action='store_true',
         help='enable Exponential Moving Average')
+    parser.add_argument('--kfold', type=int, default=-1,
+        help='if kfold > 0 then do k-fold Cross Validation. if < 1 then do not use. (default: -1)')
+    parser.add_argument('--off-same-init', dest='same_init', action='store_false',
+        help='disable learning at same initialization weights in Cross Validation')
 
     if 'Performance' in description:
         # General
