@@ -6,8 +6,10 @@ import pickle
 import numpy as np
 import cv2
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
-
-
+import sys
+sys.path.append('..')
+from utils.get_argument import get_args, parse_config
+del sys.path[-1]
 
 def main(root_path, arg_out_dir=None, output_scalar='scalars_data'):
     if arg_out_dir is not None:
@@ -38,18 +40,21 @@ def main(root_path, arg_out_dir=None, output_scalar='scalars_data'):
     for root_path, out_dir, fname in paths:
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
+        config_path = os.path.join(os.path.dirname(root_path), 'configs', fname, 'config')
+        config = parse_config(config_path)
+        args = get_args(inputs=config)
+
         path = os.path.join(root_path, fname)
         event_path = glob(os.path.join(path, 'events*'))[0]
         print('load ==> {}'.format(event_path))
         event_acc = EventAccumulator(event_path)
         event_acc.Reload()
-
         # save scalar data
         scalars = {}
         for s_tag in event_acc.Tags()['scalars']:
             events = event_acc.Scalars(s_tag)
             scalars[s_tag] = np.asarray([event.value for event in events])
-        
+
         # calc total loss
         if '_ae_' in fname:
             # ae
@@ -68,19 +73,39 @@ def main(root_path, arg_out_dir=None, output_scalar='scalars_data'):
             a = 0
         if 'no_pred' in fname:
             d = 0
-        
-        if 'loss/train/quantization' in scalars:
-            scalars['loss/train'] = a * scalars['loss/train/reconstruction'] + (b + c) * scalars['loss/train/quantization'] + d * scalars['loss/train/prediction']
-        else:
-            scalars['loss/train'] = a * scalars['loss/train/reconstruction'] + d * scalars['loss/train/prediction']
 
-        if 'loss/test/quantization' in scalars:
-            scalars['loss/test'] = a * scalars['loss/test/reconstruction'] + (b + c) * scalars['loss/test/quantization'] + d * scalars['loss/test/prediction']
-        else:
-            scalars['loss/test'] = a * scalars['loss/test/reconstruction'] + d * scalars['loss/test/prediction']
+        if args.kfold > 0:
+            for cnt in range(args.kfold):
+                tag = 'cv{:02}'.format(cnt)
+                if hasattr(args, 'k'):
+                    phase = 'train'
+                    scalars['{}/loss/{}'.format(tag, phase)] = a * scalars['{}/loss/{}/reconstruction'.format(tag, phase)] \
+                                                             + (b + c) * scalars['{}/loss/{}/quantization'.format(tag, phase)] \
+                                                             + d * scalars['{}/loss/{}/prediction'.format(tag, phase)]
+                    phase = 'test'
+                    scalars['{}/loss/{}'.format(tag, phase)] = a * scalars['{}/loss/{}/reconstruction'.format(tag, phase)] \
+                                                             + (b + c) * scalars['{}/loss/{}/quantization'.format(tag, phase)] \
+                                                             + d * scalars['{}/loss/{}/prediction'.format(tag, phase)]
+                else:
+                    phase = 'train'
+                    scalars['{}/loss/{}'.format(tag, phase)] = a * scalars['{}/loss/{}/reconstruction'.format(tag, phase)] \
+                                                             + d * scalars['{}/loss/{}/prediction'.format(tag, phase)]
+                    phase = 'test'
+                    scalars['{}/loss/{}'.format(tag, phase)] = a * scalars['{}/loss/{}/reconstruction'.format(tag, phase)] \
+                                                             + d * scalars['{}/loss/{}/prediction'.format(tag, phase)]
+        else:            
+            if 'loss/train/quantization' in scalars:
+                scalars['loss/train'] = a * scalars['loss/train/reconstruction'] + (b + c) * scalars['loss/train/quantization'] + d * scalars['loss/train/prediction']
+            else:
+                scalars['loss/train'] = a * scalars['loss/train/reconstruction'] + d * scalars['loss/train/prediction']
+
+            if 'loss/test/quantization' in scalars:
+                scalars['loss/test'] = a * scalars['loss/test/reconstruction'] + (b + c) * scalars['loss/test/quantization'] + d * scalars['loss/test/prediction']
+            else:
+                scalars['loss/test'] = a * scalars['loss/test/reconstruction'] + d * scalars['loss/test/prediction']
 
         datas[fname] = scalars
-        
+
         out_dir_fname = os.path.join(out_dir, fname)
         if not os.path.exists(out_dir_fname):
             os.makedirs(out_dir_fname)
@@ -132,7 +157,7 @@ if __name__ == '__main__':
     #     out_dir = sys.argv[2]
 
     if args.glob is None:
-        root_path = args.log_root
+        root_path = args.log_root.rstrip('/')
         dirname = os.path.dirname(args.log_root.rstrip('/'))
         out_dir = os.path.join(dirname, 'datas')
         main(root_path, out_dir, output_scalar=args.output_scalar)

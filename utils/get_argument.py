@@ -185,8 +185,6 @@ def get_args(description='VQ-VAE', return_parser=False, inputs=None):
         # Latent space
         parser.add_argument('--hidden-size', type=int, default=256,
             help='size of the latent vectors (default: 256)')
-        parser.add_argument('--k', type=int, default=512,
-            help='number of latent vectors (default: 512)')
         parser.add_argument('--prior', type=str, default='Uniform',
             help='name of prior distribution (default: Uniform)')
         parser.add_argument('--hidden-fmap-size', type=int, default=None,
