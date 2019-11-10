@@ -383,7 +383,123 @@ def train_test_summary(scalar_data, out_dir, kfold=-1, adjust_y_scale=True, plot
         plt.savefig(out_path)
         plt.close()
 
+def plot_quantile(scalar_data, out_dir, kfold, epoch=100):
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir)
 
+    fontsize = 24
+    plt.rcParams["font.size"] = fontsize
+    num_epoch = 100
+    figsize = (16, 9)
+
+    figs_num = {}
+    y_min_max = {}
+
+    def rm_key(key):
+        if 'k4-2' in key:
+            return True
+        
+        if 'k4' in key:
+            return False
+        
+        return True
+
+    file_keys = list(filter(rm_key, scalar_data.keys()))
+    file_keys = sorted(file_keys, key=lambda x: parse_ksize(x))
+    box_data = {}
+    for file_key in file_keys:
+        scalar = scalar_data[file_key]
+        plotargs = get_plotargs(file_key)
+        plotargs = get_plotargs(file_key)
+        if 'label' not in plotargs:
+            plotargs["label"] = file_key
+        label_name = plotargs["label"]
+        
+        assert kfold > 0
+        s_keys = scalar.keys()
+        set_keys = set(map(lambda x: x[x.find('/') + 1:], s_keys))
+        dict_keys = {i: list(filter(lambda x: fnmatch(x, '*/{}'.format(i)), s_keys)) for i in set_keys}
+        x_cnt = 0
+        for data_key in dict_keys:
+            cv_keys = dict_keys[data_key]
+
+            key_without_train_test = re.sub('train|test|val', '', data_key)
+            fig_key = '/'.join([label_name, key_without_train_test])
+
+            if data_key not in figs_num:
+                fig = plt.figure(figsize=figsize)
+                figs_num[data_key] = fig.number
+                ax = fig.add_subplot(1, 1, 1)
+                ax.set_title(data_key)
+                box_data[data_key] = []
+            else:
+                fig = plt.figure(figs_num[data_key])
+                ax = fig.axes[0]
+            data = []
+            for cv_key in cv_keys:
+                data.append(scalar[cv_key])
+            data = np.asarray(data)
+
+            if 'train' in data_key:
+                print(file_key, data_key)
+                data = data.reshape(kfold, num_epoch, -1).mean(-1)
+            if 'label' not in plotargs:
+                plotargs["label"] = file_key
+            
+            data = data[:, epoch-1]
+
+            box_data[data_key].append({
+                'data': data,
+                'label': parse_ksize(file_key),
+            })
+
+            if key_without_train_test not in y_min_max:
+                y_min_max[key_without_train_test] = [data.min(), data.max()]
+            else:
+                if y_min_max[key_without_train_test][0] > data.min():
+                    y_min_max[key_without_train_test][0] = data.min()
+                if y_min_max[key_without_train_test][1] < data.max():
+                    y_min_max[key_without_train_test][1] = data.max()
+                
+
+    for key in figs_num:
+        print(key)
+        key_without_train_test = re.sub('train|test|val', '', key)
+        fig = plt.figure(figs_num[key])
+        ax = fig.axes[0]
+        e0 = 1
+        e1 = 1
+        if 'loss' in key:
+            ax.set_yscale('log')
+            e0 = 1e-10
+            e1 = y_min_max[key_without_train_test][1]
+            ax.set_ylabel('Loss value')
+        if 'accuracy' in key:
+            ax.set_ylabel('Accuracy rate')
+        ax.set_ylim(y_min_max[key_without_train_test][0]-e0, y_min_max[key_without_train_test][1]+e1)
+        datas = [d['data'] for d in box_data[key]]
+        labels =[d['label'] for d in box_data[key]]
+        ax.boxplot(datas, labels=labels)
+        ax.set_xlabel('K')
+        ax.grid()
+
+        out_path = os.path.join(out_dir, '{}.png'.format(key.replace('/', '-')))
+        plt.tight_layout()
+        plt.savefig(out_path)
+        plt.close()
+
+def update_cvcnt(dict_data, offset=5, verbose=False):
+    keys = list(dict_data.keys())
+    for key in keys:
+        extracted = re.search('cv[0-9]+', key)
+        if extracted:
+            str_number = extracted.group(0)[2:]
+            cnt = int(str_number) + offset
+            update_key = re.sub('cv[0-9]+', 'cv' + str(cnt).zfill(len(str_number)), key)
+            dict_data[update_key] = dict_data[key]
+            if verbose:
+                print('{}==>{}'.format(key, update_key))
+            del dict_data[key]
 
 def main(scalar_path, out_dir, kfold, **kwargs):
 
@@ -391,8 +507,16 @@ def main(scalar_path, out_dir, kfold, **kwargs):
         scalar_data = {}
         for s_path in scalar_path:
             with open(s_path, 'rb') as f:
-                scalar_data.update(pickle.load(f))
-
+                scalar_data2 = pickle.load(f)
+            keys2 = list(scalar_data2.keys())
+            keys1 = list(scalar_data.keys())
+            for key in keys2:
+                if key in keys1:
+                    update_cvcnt(scalar_data2[key], offset=kfold)
+                    scalar_data[key].update(scalar_data2[key])
+                else:
+                    scalar_data[key] = scalar_data2[key]
+        kfold = int(len(scalar_path) * kfold)
     elif isinstance(scalar_path, str):
         with open(scalar_path, 'rb') as f:
             scalar_data = pickle.load(f)
@@ -404,6 +528,10 @@ def main(scalar_path, out_dir, kfold, **kwargs):
     # train-test summary
     train_test_summary(scalar_data, os.path.join(out_dir, 'train-vs-test'), kfold, **kwargs)
     train_test_summary(scalar_data, os.path.join(out_dir, 'train-vs-test'), kfold, plot_mean_value=True, **kwargs)
+
+    # boxplot
+    if kfold > 0:
+        plot_quantile(scalar_data, os.path.join(out_dir, 'boxplot'), kfold)
 
     
 
