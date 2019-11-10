@@ -100,7 +100,6 @@ def test(data_loader, model, clfy, args, writer=None, loss_fn=None, tag=None):
             writer.add_scalar('{}/loss/test/prediction'.format(tag), loss_pred.item(), args.steps)
             writer.add_scalar('{}/accuracy/test'.format(tag), acc_total.item(), args.steps)
 
-
     res = {
         'recons': loss_recons.item(),
         'vq': loss_vq.item(),
