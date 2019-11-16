@@ -42,7 +42,7 @@ def main(root_path, arg_out_dir=None, output_scalar='scalars_data'):
             os.makedirs(out_dir)
         config_path = os.path.join(os.path.dirname(root_path), 'configs', fname, 'config')
         config = parse_config(config_path)
-        args = get_args(description='AE', inputs=config)
+        args = get_args(description='VQ-VAE', inputs=config)
         print(args)
 
         path = os.path.join(root_path, fname)
