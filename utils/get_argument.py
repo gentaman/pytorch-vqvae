@@ -129,6 +129,8 @@ def get_args(description='VQ-VAE', return_parser=False, inputs=None):
             help='disable Batch Noramalization')
         parser.add_argument('--resblock-transpose', action='store_true',
             help='apply conv transpose to ResBlock')
+        parser.add_argument('--my', action='store_true',
+            help='enable my vq-embedding grad')
 
         # Latent space
         parser.add_argument('--hidden-size', type=int, default=256,
@@ -154,6 +156,8 @@ def get_args(description='VQ-VAE', return_parser=False, inputs=None):
             help='contribution of reconstruction loss, between 0.1 and 2.0 (default: 1.0)')
         parser.add_argument('--vq_coeff', type=float, default=1.0,
             help='contribution of vector quantization loss, between 0.1 and 2.0 (default: 1.0)')
+        parser.add_argument('--alpha', type=str, default=None, choices=[None, 'cos'],
+            help='')
 
         # Miscellaneous
         parser.add_argument('--root', type=str, default='.',

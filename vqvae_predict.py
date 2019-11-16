@@ -18,7 +18,7 @@ from datasets.cross_validation import kfold_cv, get_splited_dataloader
 from tensorboardX import SummaryWriter
 
 
-def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None, tag=None):
+def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None, tag=None, alpha=None):
     for images, labels in tqdm(data_loader, total=len(data_loader)):
         # print(images.shape)
         images = images.to(args.device)
@@ -43,7 +43,10 @@ def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None, 
         loss_pred = loss_fn(preds, labels)
         acc, = accuracy(preds, labels)
 
-        loss = args.recon_coeff * loss_recons + args.vq_coeff * loss_vq + args.beta * loss_commit + args.gamma * loss_pred
+        if alpha is None:
+            loss = args.recon_coeff * loss_recons + args.vq_coeff * loss_vq + args.beta * loss_commit + args.gamma * loss_pred
+        else:
+            loss = alpha(args.steps) * (args.recon_coeff * loss_recons + args.beta * loss_commit + args.gamma * loss_pred) +  (1 - alpha(args.steps)) * args.vq_coeff * loss_vq
         loss.backward()
 
         if args.ema:
@@ -162,7 +165,7 @@ def main(args):
     writer.add_image('original', fixed_grid, 0)
 
     model = VectorQuantizedVAE(
-        num_channels, args.hidden_size, args.k, pred=True, transpose=args.resblock_transpose, BN=args.BN, bias=args.bias, ema=args.ema,
+        num_channels, args.hidden_size, args.k, pred=True, transpose=args.resblock_transpose, BN=args.BN, bias=args.bias, ema=args.ema, my=args.my,
         ).to(args.device)
 
     if args.hidden_fmap_size is None:
@@ -202,6 +205,10 @@ def main(args):
     with open(os.path.join(save_filename, 'init.predictor.pt'), 'wb') as f:
         torch.save(predictor.state_dict(), f)
 
+    if args.alpha == 'cos':
+        print('alpha cos')
+        args.alpha = lambda t: 1 - np.round(np.cos(np.pi * t / args.num_epochs), decimals=1)
+
     for cnt, (train_loader, valid_loader) in enumerate(zip(train_loaders, valid_loaders)):
         # Generate the samples first once
         reconstruction = generate_samples(fixed_images, model, args)
@@ -218,11 +225,14 @@ def main(args):
             print('Number of CV: {:02}'.format(cnt))
         best_loss = -1.
         for epoch in tqdm(range(args.num_epochs), total=args.num_epochs):
+            if args.alpha is not None:
+                model.codebook.alpha = 0.5 * (1 - np.round(epoch / args.num_epochs, decimals=1))
+
             if args.kfold > 0:
-                train(train_loader, model, predictor, optimizer, args, writer, predictor.loss, tag='cv{:02}'.format(cnt))
+                train(train_loader, model, predictor, optimizer, args, writer, predictor.loss, tag='cv{:02}'.format(cnt), alpha=args.alpha)
                 losses = test(valid_loader, model, predictor, args, writer, predictor.loss, tag='cv{:02}'.format(cnt))
             else:
-                train(train_loader, model, predictor, optimizer, args, writer, predictor.loss)
+                train(train_loader, model, predictor, optimizer, args, writer, predictor.loss, alpha=args.alpha)
                 losses = test(valid_loader, model, predictor, args, writer, predictor.loss)
 
             loss = args.recon_coeff * losses['recons'] + (args.vq_coeff + args.beta) * losses['vq'] + args.gamma * losses['pred']

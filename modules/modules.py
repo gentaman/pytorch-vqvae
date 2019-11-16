@@ -5,7 +5,7 @@ from torch.distributions.normal import Normal
 from torch.distributions.uniform import Uniform
 from torch.distributions import kl_divergence
 
-from .functions import vq, vq_st
+from .functions import vq, vq_st, vq_ori
 
 def to_scalar(arr):
     if type(arr) == list:
@@ -26,6 +26,13 @@ def weights_init(m):
             m.bias.data.fill_(0)
         except AttributeError:
             print("Skipping bias initialization of ", classname)
+
+class AddFunction(nn.Module):
+    def __init__(self):
+        super(AddFunction, self).__init__()
+        
+    def forward(self, x, y):
+        return x + y
 
 class AE(nn.Module):
     def __init__(self, input_dim, dim, pred=False, transpose=False, BN=True):
@@ -130,15 +137,19 @@ class VQEmbedding(nn.Module):
         self.M = 0.0
         self.gamma = gamma
         self.index = None
+        self.alpha = 0.0
 
     def forward(self, z_e_x):
         z_e_x_ = z_e_x.permute(0, 2, 3, 1).contiguous()
         latents = vq(z_e_x_, self.embedding.weight)
         return latents
 
-    def straight_through(self, z_e_x):
+    def straight_through(self, z_e_x, my=False):
         z_e_x_ = z_e_x.permute(0, 2, 3, 1).contiguous()
-        z_q_x_, indices = vq_st(z_e_x_, self.embedding.weight.detach())
+        if my:
+            z_q_x_, indices = vq_ori(z_e_x_, self.embedding.weight.detach(), self.alpha)
+        else:
+            z_q_x_, indices = vq_st(z_e_x_, self.embedding.weight.detach())
         z_q_x = z_q_x_.permute(0, 3, 1, 2).contiguous()
 
         self.index = indices
@@ -170,6 +181,7 @@ class ResBlock(nn.Module):
     def __init__(self, dim, transpose=False, BN=True, bias=True):
         super().__init__()
         self.transpose = transpose
+        self.add_fn = AddFunction()
         if self.transpose:
             connections = [
                 nn.ReLU(True),
@@ -205,13 +217,15 @@ class ResBlock(nn.Module):
                 cnt += 1
             else:
                 h = b(h)
-        return x + h
+        return self.add_fn(x, h)
+        # return x + h
 
 
 class VectorQuantizedVAE(nn.Module):
-    def __init__(self, input_dim, dim, K=512, pred=False, transpose=False, BN=True, bias=True, ema=False):
+    def __init__(self, input_dim, dim, K=512, pred=False, transpose=False, BN=True, bias=True, ema=False, my=False):
         super().__init__()
         self.pred = pred
+        self.my = my
 
         self.codebook = VQEmbedding(K, dim, ema)
 
@@ -254,7 +268,7 @@ class VectorQuantizedVAE(nn.Module):
 
     def forward(self, x):
         z_e_x = self.encoder(x)
-        z_q_x_st, z_q_x = self.codebook.straight_through(z_e_x)
+        z_q_x_st, z_q_x = self.codebook.straight_through(z_e_x, self.my)
         x_tilde = self.decoder(z_q_x_st)
         if self.pred:
             return x_tilde, z_e_x, z_q_x, z_q_x_st
