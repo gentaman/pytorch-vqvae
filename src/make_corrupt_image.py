@@ -102,7 +102,8 @@ def main(main_args):
         images = images.to(device)
         labels = labels.to(device)
 
-        for n_cv in range(args.kfold):
+        cv_max = args.kfold if args.kfold > 0 else 1
+        for n_cv in range(cv_max):
             m_name = 'models_{}'.format(n_cv)
             model_path = os.path.join(args.root, m_name, args.output_folder, 'best.pt')
             print('load model ==> {}'.format(model_path))
