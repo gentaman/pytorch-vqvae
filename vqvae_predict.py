@@ -19,6 +19,8 @@ from tensorboardX import SummaryWriter
 
 
 def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None, tag=None, alpha=None):
+    if args.ema:
+        model.codebook.reset()
     for images, labels in tqdm(data_loader, total=len(data_loader)):
         # print(images.shape)
         images = images.to(args.device)
@@ -31,10 +33,10 @@ def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None, 
         # Reconstruction loss
         loss_recons = F.mse_loss(x_tilde, images)
         # Vector quantization objective
-        if not args.ema:
-            loss_vq = F.mse_loss(z_q_x, z_e_x.detach())
-        else:
+        if args.ema or args.em:
             loss_vq = torch.zeros(1, device=args.device)
+        else:
+            loss_vq = F.mse_loss(z_q_x, z_e_x.detach())
         # Commitment objective
         loss_commit = F.mse_loss(z_e_x, z_q_x.detach())
 
@@ -49,9 +51,10 @@ def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None, 
             loss = alpha(args.steps) * (args.recon_coeff * loss_recons + args.beta * loss_commit + args.gamma * loss_pred) +  (1 - alpha(args.steps)) * args.vq_coeff * loss_vq
         loss.backward()
 
-        if args.ema:
+        if args.ema and (not args.em):
             model.codebook.update(len(z_e_x), z_e_x, device=args.device)
 
+        loss_vq = loss_commit
         if writer is not None:
             # Logs
             if tag is None:
@@ -59,13 +62,22 @@ def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None, 
                 writer.add_scalar('loss/train/quantization', loss_vq.item(), args.steps)
                 writer.add_scalar('loss/train/prediction', loss_pred.item(), args.steps)
                 writer.add_scalar('accuracy/train', acc.item(), args.steps)
+                # writer.add_histogram('embedding/weight', model.codebook.embedding.weight.data, args.steps)
             else:
                 writer.add_scalar('{}/loss/train/reconstruction'.format(tag), loss_recons.item(), args.steps)
                 writer.add_scalar('{}/loss/train/quantization'.format(tag), loss_vq.item(), args.steps)
                 writer.add_scalar('{}/loss/train/prediction'.format(tag), loss_pred.item(), args.steps)
                 writer.add_scalar('{}/accuracy/train'.format(tag), acc.item(), args.steps)
+                # writer.add_histogram('{}/embedding/weight'.format(tag), model.codebook.embedding.weight.data, args.steps)
 
         optimizer.step()
+        if args.em:
+            # m = 100
+            m = args.k * 2
+            z_e_x = model.encoder(images)
+            counts = model.sampling(z_e_x, m=m)
+            model.codebook.m_step(z_e_x, counts)
+
         args.steps += 1
 
 def test(data_loader, model, clfy, args, writer=None, loss_fn=None, tag=None):
@@ -197,6 +209,7 @@ def main(args):
             {'params': predictor.parameters()}],
         lr=args.lr
         )
+    # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 2)
 
     save_filename = os.path.join(root, 'models', args.output_folder)
 
@@ -210,6 +223,7 @@ def main(args):
         args.alpha = lambda t: 1 - np.round(np.cos(np.pi * t / args.num_epochs), decimals=1)
 
     for cnt, (train_loader, valid_loader) in enumerate(zip(train_loaders, valid_loaders)):
+        # optimizer.lr = args.lr
         # Generate the samples first once
         reconstruction = generate_samples(fixed_images, model, args)
         grid = make_grid(reconstruction.cpu(), nrow=8, range=(-1, 1), normalize=True)
@@ -259,6 +273,7 @@ def main(args):
                 model_path = os.path.join(save_filename, 'predictor_{}.pt'.format(epoch + 1))
                 with open(model_path, 'wb') as f:
                     torch.save(predictor.state_dict(), f)
+            # scheduler.step()
         
         if not args.same_init:
             continue

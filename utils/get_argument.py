@@ -131,6 +131,9 @@ def get_args(description='VQ-VAE', return_parser=False, inputs=None):
             help='apply conv transpose to ResBlock')
         parser.add_argument('--my', action='store_true',
             help='enable my vq-embedding grad')
+        parser.add_argument('--em', '--mcem', dest='em', action='store_true',
+            help='enable Monte Carlo Expectation Maximization to update codebook')
+
 
         # Latent space
         parser.add_argument('--hidden-size', type=int, default=256,
