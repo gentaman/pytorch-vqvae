@@ -214,7 +214,8 @@ class VQEmbedding(nn.Module):
                 n = torch.clamp(counts.sum(0), min=1)
                 self.N = self.N * self.gamma + n * (1 - self.gamma)
                 self.M = self.M * self.gamma + e * (1 - self.gamma)
-                data = self.M / self.N
+                # print(self.M.shape, self.N.shape)
+                data = self.M / self.N.unsqueeze(-1)
             else:
                 n = torch.clamp(counts.sum(0), min=1)
                 data = e / n
