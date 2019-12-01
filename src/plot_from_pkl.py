@@ -186,6 +186,11 @@ def global_summary(scalar_data, out_dir, kfold=-1, plot_mean_value=False):
                 if plot_mean_value:
                     plot_value = data.mean(0)
                 else:
+                    # print(cv_keys, data_key, data.shape)
+                    if len(data.shape) < 2:
+                        data = np.asarray(map(lambda x: [0]* (num_epoch - len(x)) + x, data))
+                        print(data.shape)
+                        continue
                     q75, q25, plot_value = np.percentile(data, [75, 25, 50], axis=0)
                     fill_min = q25
                     fill_max = q75
