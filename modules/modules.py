@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions.normal import Normal
 from torch.distributions.uniform import Uniform
+from torch.distributions.multinomial import Multinomial
 from torch.distributions import kl_divergence
 
 from .functions import vq, vq_st, vq_ori
@@ -30,7 +31,7 @@ def weights_init(m):
 class AddFunction(nn.Module):
     def __init__(self):
         super(AddFunction, self).__init__()
-        
+  
     def forward(self, x, y):
         return x + y
 
@@ -173,9 +174,54 @@ class VQEmbedding(nn.Module):
                 self.N = self.N * self.gamma + n * (1 - self.gamma)
                 self.M = self.M * self.gamma + sum_z * (1 - self.gamma)
                 self.embedding.weight.data = (self.M / self.N).transpose(1, 0)
+                # self.embedding.state_dict()['weight'] = (self.M / self.N).transpose(1, 0)
         else:
             raise ValueError('ema is False')
 
+    def reset(self):
+        if self.ema:
+            self.M = 0.0
+            self.N = 0.0
+
+    def logits(self, z_e_x):
+        batch, ch, h, w = z_e_x.shape
+        inputs = z_e_x.permute(0, 2, 3, 1).contiguous().view(-1, ch)
+        codebook = self.embedding.weight
+        with torch.no_grad():
+            embedding_size = codebook.size(1)
+            inputs_size = inputs.size()
+            inputs_flatten = inputs.view(-1, embedding_size)
+
+            codebook_sqr = torch.sum(codebook ** 2, dim=1)
+            inputs_sqr = torch.sum(inputs_flatten ** 2, dim=1, keepdim=True)
+
+            # Compute the distances to the codebook
+            distances = torch.addmm(codebook_sqr + inputs_sqr,
+                inputs_flatten, codebook.t(), alpha=-2.0, beta=1.0)
+
+            # distance.shape: (N*W*H, K)
+
+        return - distances
+
+    def m_step(self, z_e_x, counts):
+        with torch.no_grad():
+            batch, ch, h, w = z_e_x.shape
+            z_e_x = z_e_x.permute(0, 2, 3, 1).contiguous().view(-1, ch)
+            # counts.shape: (N*W*H, K), count of sampeling code.
+            # z_e_x.shape: (N*W*H, Dim)
+            e = torch.mm(counts.transpose(1, 0), z_e_x)
+            if self.ema:
+                n = torch.clamp(counts.sum(0), min=1)
+                self.N = self.N * self.gamma + n * (1 - self.gamma)
+                self.M = self.M * self.gamma + e * (1 - self.gamma)
+                data = self.M / self.N
+            else:
+                n = torch.clamp(counts.sum(0), min=1)
+                data = e / n
+
+            # data.shape: (K, Dim)
+            self.embedding.weight.data = data
+            # self.embedding.state_dict()['weight'] = data
 
 class ResBlock(nn.Module):
     def __init__(self, dim, transpose=False, BN=True, bias=True):
@@ -274,7 +320,12 @@ class VectorQuantizedVAE(nn.Module):
             return x_tilde, z_e_x, z_q_x, z_q_x_st
         else:
             return x_tilde, z_e_x, z_q_x
-
+        
+    def sampling(self, z_e_x, m=100):
+        logits = self.codebook.logits(z_e_x)
+        sampler = Multinomial(total_count=m, logits=logits)
+        return sampler.sample()
+    
 
 class GatedActivation(nn.Module):
     def __init__(self):
