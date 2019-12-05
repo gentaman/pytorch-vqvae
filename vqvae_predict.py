@@ -73,7 +73,7 @@ def train(data_loader, model, clfy, optimizer, args, writer=None, loss_fn=None, 
         optimizer.step()
         if args.em:
             # m = 100
-            m = args.k * 2
+            m = args.k * 2 if args.k * 2 <= 512 else 512
             z_e_x = model.encoder(images)
             counts = model.sampling(z_e_x, m=m)
             model.codebook.m_step(z_e_x, counts)
