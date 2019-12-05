@@ -52,6 +52,7 @@ def main(root_path, arg_out_dir=None, output_scalar='scalars_data'):
         event_acc.Reload()
         # save scalar data
         scalars = {}
+        # print(event_acc.Tags()['scalars'])
         for s_tag in event_acc.Tags()['scalars']:
             events = event_acc.Scalars(s_tag)
             scalars[s_tag] = np.asarray([event.value for event in events])
@@ -78,6 +79,7 @@ def main(root_path, arg_out_dir=None, output_scalar='scalars_data'):
         if args.kfold > 0:
             for cnt in range(args.kfold):
                 tag = 'cv{:02}'.format(cnt)
+                # print(scalars.keys())
                 if hasattr(args, 'k'):
                     phase = 'train'
                     scalars['{}/loss/{}'.format(tag, phase)] = a * scalars['{}/loss/{}/reconstruction'.format(tag, phase)] \

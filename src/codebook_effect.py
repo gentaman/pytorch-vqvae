@@ -144,6 +144,7 @@ def main(main_args):
             re_mse_loss = 0.
             re_corrects = 0.
             n_corrects = 0
+            mse_recons_corrupt = 0.
             for images, labels in tqdm(test_loader, total=len(test_loader)):
                 images = images.to(device)
                 labels = labels.to(device)
@@ -160,10 +161,12 @@ def main(main_args):
                 mse_loss += F.mse_loss(rec_imgs[correct_index], images[correct_index])
                 re_corrects += torch.sum(result['re_pred'] == labels[correct_index]).float()
                 n_corrects += torch.sum(correct_index).float()
+                mse_recons_corrupt += F.mse_loss(result['corrupt_img'], rec_imgs[correct_index])
             scalars[n_cv]['mse_loss'] = mse_loss.item()
             scalars[n_cv]['re_mse_loss'] = re_mse_loss.item()
             scalars[n_cv]['n_corrects'] = n_corrects.item()
             scalars[n_cv]['re_corrects'] = re_corrects.item()
+            scalars[n_cv]['mse_rec_cor'] = mse_recons_corrupt.item()
 
         dname = os.path.dirname(config_path)
         out_dir = os.path.join(dname, main_args.output_folder, dname)
