@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch.distributions.normal import Normal
 from torch.distributions import kl_divergence
 
-from functions import vq, vq_st
+from .functions import vq, vq_st
 
 def to_scalar(arr):
     if type(arr) == list:
@@ -110,6 +110,8 @@ class ResBlock(nn.Module):
 class VectorQuantizedVAE(nn.Module):
     def __init__(self, input_dim, dim, K=512):
         super().__init__()
+        self.codebook = VQEmbedding(K, dim)
+
         self.encoder = nn.Sequential(
             nn.Conv2d(input_dim, dim, 4, 2, 1),
             nn.BatchNorm2d(dim),
@@ -119,7 +121,6 @@ class VectorQuantizedVAE(nn.Module):
             ResBlock(dim),
         )
 
-        self.codebook = VQEmbedding(K, dim)
 
         self.decoder = nn.Sequential(
             ResBlock(dim),
@@ -131,6 +132,24 @@ class VectorQuantizedVAE(nn.Module):
             nn.ConvTranspose2d(dim, input_dim, 4, 2, 1),
             nn.Tanh()
         )
+        # self.encoder = nn.Sequential(
+        #     nn.Conv2d(input_dim, dim, 4, 2, 0),
+        #     nn.BatchNorm2d(dim),
+        #     nn.ReLU(True),
+        #     nn.Conv2d(dim, dim, 4, 2, 0),
+        #     ResBlock(dim),
+        #     ResBlock(dim),
+        # )
+        # self.decoder = nn.Sequential(
+        #     ResBlock(dim),
+        #     ResBlock(dim),
+        #     nn.ReLU(True),
+        #     nn.ConvTranspose2d(dim, dim, 4, 2, 0),
+        #     nn.BatchNorm2d(dim),
+        #     nn.ReLU(True),
+        #     nn.ConvTranspose2d(dim, input_dim, 4, 2, 0),
+        #     nn.Tanh()
+        # )
 
         self.apply(weights_init)
 
